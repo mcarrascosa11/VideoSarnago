@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#18212b">
+  <meta name="description" content="Herramienta de vídeo de la campaña Abrigar el Refugio de Sarnago.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <title>Video Sarnago · Abrigar el Refugio</title>
+</head>
+<body>
+  <div id="app">
+    <header class="site-head">
+      <div class="brand"><span class="brand-mark">S/</span><span><b>SARNAGO</b><small>ABRIGAR EL REFUGIO</small></span></div>
+      <div class="head-side">ESTUDIO DE VÍDEO <span>01 / 2026</span></div>
+    </header>
+    <main class="layout">
+      <section class="intro">
+        <div><p class="eyebrow">HERRAMIENTA DE CAMPAÑA / 01</p><h1>Un vídeo.<br><em>Muchas voces.</em></h1></div>
+        <p>Una misma identidad para todas las personas que apoyan El Refugio. Sube el vídeo, escribe quién habla y descarga el Reel y su portada.</p>
+      </section>
+      <div class="workbench">
+        <section class="editor">
+          <div class="step"><div class="step-title"><span class="step-num">01</span><div><h2>Material</h2><p>Vídeo vertical, imagen de portada e identidad de quien aparece.</p></div></div>
+            <label class="drop" id="videoDrop"><input id="videoInput" type="file" accept="video/*"><span class="drop-plus">+</span><b id="videoLabel">Seleccionar vídeo</b><small>MP4 o MOV · vertical · 30–90 segundos recomendados</small></label>
+            <div class="two"><label>Nombre y apellidos<input id="personName" type="text" maxlength="80" placeholder="Nombre Apellidos" autocomplete="off"></label><label>Profesión / cargo<input id="personRole" type="text" maxlength="110" placeholder="Arquitecta · Escritora · Periodista" autocomplete="off"></label></div>
+            <div class="photo-row"><label class="drop small" id="coverDrop"><input id="coverInput" type="file" accept="image/*"><span class="drop-plus">+</span><b id="coverLabel">Subir fotograma para portada</b><small>JPG, PNG o WEBP</small></label><button id="captureBtn" class="secondary" type="button" disabled>Usar fotograma del vídeo</button></div>
+          </div>
+          <div class="step"><div class="step-title"><span class="step-num">02</span><div><h2>Subtítulos</h2><p>Generación automática en tu navegador y corrección antes de exportar.</p></div></div>
+            <div class="subtitle-actions"><button class="secondary" id="autoBtn" disabled>Generar automáticamente</button><label class="file-inline">Importar .SRT<input id="srtInput" type="file" accept=".srt,text/plain"></label><select id="language" aria-label="Idioma"><option value="spanish">Español</option><option value="english">Inglés</option><option value="catalan">Catalán</option><option value="french">Francés</option></select></div>
+            <p class="hint">La primera transcripción descarga un modelo de voz (Whisper). Puede tardar varios minutos. Revisa nombres propios y tiempos.</p>
+            <div class="subtitle-header"><b>Fragmentos <span id="cueCount">0</span></b><div><button type="button" class="text-btn" id="addCue">+ Añadir</button> <button type="button" class="text-btn" id="exportSrt">Descargar SRT</button></div></div>
+            <div id="cues" class="cue-list"><p class="empty">Todavía no hay subtítulos. Puedes crearlos automáticamente o importar un SRT.</p></div>
+          </div>
+          <div class="step"><div class="step-title"><span class="step-num">03</span><div><h2>Ajustes de campaña</h2><p>Se guardan únicamente en este navegador.</p></div></div>
+            <label>Enlace de la campaña de Goteo<input id="campaignUrl" type="url" placeholder="https://www.goteo.org/project/..." autocomplete="off"></label>
+            <label class="logo-upload">Logotipo de Sarnago (opcional)<input id="logoInput" type="file" accept="image/*"><small id="logoLabel">Seleccionar PNG transparente</small></label>
+            <div class="two short"><label>Inicio <span class="unit">segundos</span><input type="number" id="introSecs" value="2.5" min="0" max="8" step="0.5"></label><label>Cierre <span class="unit">segundos</span><input type="number" id="outroSecs" value="4.5" min="2" max="12" step="0.5"></label></div>
+            <label>Calidad de salida<select id="renderQuality"><option value="720">720 × 1280 · más rápido</option><option value="1080">1080 × 1920 · alta calidad</option></select></label>
+          </div>
+          <div class="step delivery"><div class="step-title"><span class="step-num">04</span><div><h2>Exportación</h2><p>Portada independiente y Reel con carátula, subtítulos, footer y cierre.</p></div></div>
+            <button id="coverDownload" class="secondary wide" disabled>Descargar portada vertical · PNG</button>
+            <button id="gridDownload" class="secondary wide" disabled>Descargar portada para cuadrícula · PNG 4:5</button>
+            <button id="renderBtn" class="primary wide" disabled>Crear Reel · MP4 ↗</button>
+            <div id="progressBox" class="progress-box" hidden><div class="progress-label"><span id="progressText">Preparando...</span><span id="progressPct"></span></div><div class="progress-track"><div id="progressFill"></div></div></div>
+            <a id="downloadVideo" class="primary wide download-link" hidden download="video-sarnago.mp4">Descargar vídeo terminado ↓</a>
+            <p class="hint">La grabación tarda aproximadamente lo que dura el vídeo. Mantén esta pestaña visible y el ordenador activo.</p>
+          </div>
+        </section>
+        <aside class="preview"><div class="preview-head"><span>VISTA PREVIA</span><div class="preview-switch"><button id="showCover" class="selected">Portada</button><button id="showOutro">Cierre</button><button id="showLive">Vídeo</button></div></div><div class="preview-canvas-wrap"><canvas id="previewCanvas" width="540" height="960" aria-label="Vista previa de la composición"></canvas><video id="previewVideo" class="hidden" controls playsinline></video></div><div class="preview-caption"><span>FORMATO 09:16</span><span>1080 × 1920</span></div><p class="preview-note">Fotografía real · tipografía editorial · arquitectura y memoria.<br>Identidad constante, sin efectos ni filtros añadidos.</p></aside>
+      </div>
+    </main>
+    <footer class="site-footer"><span>SARNAGO · TIERRA DE NADIE, TIERRA DE TODOS</span><span>EL VÍDEO NO SE SUBE A NINGÚN SERVIDOR</span></footer>
+  </div>
+  <script type="module" src="/src/app.js"></script>
+</body>
+</html>
