@@ -1,7 +1,7 @@
 import {normalizeWhisper} from './subtitles.js';
 
 let ffmpegInstance = null;
-let pipelineInstance = null;
+let whisperWorker = null;
 
 export async function getFfmpeg(status = () => {}) {
   if (ffmpegInstance && ffmpegInstance.loaded) return ffmpegInstance;
@@ -11,11 +11,18 @@ export async function getFfmpeg(status = () => {}) {
     import('@ffmpeg/util')
   ]);
   const ffmpeg = new FFmpeg();
-  const base = 'https://unpkg.com/@ffmpeg/core@0.12.10/dist/umd';
-  await ffmpeg.load({
-    coreURL: await toBlobURL(base + '/ffmpeg-core.js', 'text/javascript'),
-    wasmURL: await toBlobURL(base + '/ffmpeg-core.wasm', 'application/wasm')
-  });
+  const base = new URL('/ffmpeg/', location.origin).href.replace(/\/$/,'');
+  let timer;
+  try {
+    await Promise.race([
+      (async()=>ffmpeg.load({
+        coreURL: await toBlobURL(base + '/ffmpeg-core.js', 'text/javascript'),
+        wasmURL: await toBlobURL(base + '/ffmpeg-core.wasm', 'application/wasm')
+      }))(),
+      new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('No se pudo cargar el motor de audio. Recarga la página y comprueba la conexión.')),90000);})
+    ]);
+  } catch(e) {ffmpeg.terminate();throw e;}
+  finally {clearTimeout(timer);}
   ffmpegInstance = ffmpeg;
   return ffmpeg;
 }
@@ -36,23 +43,19 @@ export async function automaticSubtitles(file, language, length, status = () => 
     if (!data || !data.length) throw new Error('El vídeo no contiene una pista de audio legible.');
     const raw = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
     const wave = new Float32Array(raw);
-    status('Cargando Whisper en español (la primera vez descarga el modelo)…');
-    const {pipeline, env} = await import('@huggingface/transformers');
-    env.allowLocalModels = false;
-    if (!pipelineInstance) {
-      pipelineInstance = await pipeline('automatic-speech-recognition','Xenova/whisper-tiny',{
-        device:'wasm',
-        dtype:'q8',
-        progress_callback: p => {if (p.status === 'progress') status('Descargando modelo: ' + Math.round(p.progress || 0) + '%');}
-      });
-    }
-    status('Transcribiendo. Mantén abierta esta pestaña…');
-    const outputText = await pipelineInstance(wave,{
-      language:language || 'spanish',
-      task:'transcribe',
-      chunk_length_s:25,
-      stride_length_s:4,
-      return_timestamps:true
+    const outputText = await new Promise((resolve,reject) => {
+      if (!whisperWorker) whisperWorker=new Worker(new URL('./whisper.worker.js',import.meta.url),{type:'module'});
+      const worker=whisperWorker;
+      const timer=setTimeout(()=>fail('La transcripción ha superado 10 minutos. Comprueba la conexión y vuelve a intentarlo.'),600000);
+      function cleanup(){clearTimeout(timer);worker.onmessage=null;worker.onerror=null;}
+      function fail(message){cleanup();worker.terminate();whisperWorker=null;reject(new Error(message));}
+      worker.onerror=e=>fail(e.message || 'No se pudo iniciar el motor de subtítulos.');
+      worker.onmessage=({data})=>{
+        if(data.type==='status')status(data.text);
+        else if(data.type==='result'){cleanup();resolve({chunks:data.chunks});}
+        else if(data.type==='error')fail(data.message);
+      };
+      worker.postMessage({wave,language},[wave.buffer]);
     });
     if (!outputText?.chunks?.length) throw new Error('Whisper no ha detectado frases. Puedes importar un SRT.');
     const cues = normalizeWhisper(outputText.chunks, length);

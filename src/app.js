@@ -8,6 +8,7 @@ import {recordReel} from './media.js';
 const $ = id => document.getElementById(id);
 const state = {file:null, photo:null, logo:null, qrImage:null, cues:[], mode:'cover', busy:false};
 const video = $('previewVideo');
+const frameVideo = $('frameVideo');
 let sourceUrl, resultUrl, qrVersion = 0;
 const settings = ['campaignUrl','introSecs','outroSecs','renderQuality','language'];
 try { const saved = JSON.parse(localStorage.getItem('sarnago-settings') || '{}'); settings.forEach(k => {if (saved[k] !== undefined) $(k).value = saved[k];}); } catch {}
@@ -38,9 +39,9 @@ function download(blob, filename) {
 }
 function loadImage(url) {return new Promise((resolve,reject) => {const img = new Image(); img.onload = () => resolve(img); img.onerror = () => reject(new Error('No se pudo leer la imagen.')); img.src = url;});}
 async function fileImage(file) {const url = URL.createObjectURL(file); try{return await loadImage(url);} finally{URL.revokeObjectURL(url);}}
-async function capture() {
-  if (video.readyState < 2) throw new Error('Espera a que cargue el vídeo.');
-  const c = makeCanvas(video.videoWidth,video.videoHeight); c.getContext('2d').drawImage(video,0,0);
+async function capture(source = video) {
+  if (source.readyState < 2) throw new Error('Espera a que cargue el vídeo.');
+  const c = makeCanvas(source.videoWidth,source.videoHeight); c.getContext('2d').drawImage(source,0,0);
   state.photo = await loadImage(c.toDataURL('image/png')); $('coverLabel').textContent = 'Fotograma del vídeo'; preview();
 }
 $('videoInput').onchange = () => task(async () => {
@@ -50,9 +51,16 @@ $('videoInput').onchange = () => task(async () => {
   sourceUrl = URL.createObjectURL(file);
   await new Promise((resolve,reject) => {video.onloadeddata = resolve; video.onerror = () => reject(new Error('No se puede leer este vídeo. Utiliza MP4 H.264.')); video.src = sourceUrl; video.load();});
   if (!Number.isFinite(video.duration) || video.duration <= 0) throw new Error('La duración del vídeo no es válida.');
+  frameVideo.src=sourceUrl; frameVideo.load(); $('framePicker').hidden=false; $('frameTime').max=Math.max(0,video.duration-.05); $('frameTime').value=0;
   state.file = file; $('videoLabel').textContent = file.name; await capture(); status('Vídeo preparado.');
 });
-$('captureBtn').onclick = () => task(capture);
+$('captureBtn').onclick = () => task(async () => {
+  frameVideo.pause();
+  if (frameVideo.seeking) await new Promise((resolve, reject) => {const timer=setTimeout(()=>reject(new Error('No se pudo cargar ese fotograma. Selecciona otro instante.')),10000);frameVideo.addEventListener('seeked',()=>{clearTimeout(timer);resolve();},{once:true});});
+  await capture(frameVideo); state.mode='cover'; preview(); status('Portada actualizada con el fotograma seleccionado.');
+});
+$('frameTime').oninput = () => {frameVideo.pause();frameVideo.currentTime=Number($('frameTime').value);};
+frameVideo.addEventListener('timeupdate',()=>{$('frameTime').value=frameVideo.currentTime;$('framePosition').textContent=frameVideo.currentTime.toFixed(2)+' s';});
 $('coverInput').onchange = () => task(async () => {const f=$('coverInput').files[0]; if(f){state.photo=await fileImage(f); $('coverLabel').textContent=f.name; preview();}});
 $('logoInput').onchange = () => task(async () => {const f=$('logoInput').files[0]; if(f){state.logo=await fileImage(f); $('logoLabel').textContent=f.name; preview();}});
 async function updateQr() {
@@ -79,7 +87,12 @@ function renderCues() {
 $('addCue').onclick=()=>{const start=video.currentTime||0;state.cues.push({start,end:start+3,text:''});renderCues();};
 $('srtInput').onchange=()=>task(async()=>{const f=$('srtInput').files[0];if(!f)return;const cues=parseSrt(await f.text());if(!cues.length)throw new Error('El SRT no contiene subtítulos válidos.');state.cues=cues;renderCues();preview();status('Subtítulos importados.');});
 $('exportSrt').onclick=()=>download(new Blob([toSrt(state.cues)],{type:'text/plain;charset=utf-8'}),'sarnago.srt');
-$('autoBtn').onclick=()=>task(async()=>{video.pause();state.cues=await automaticSubtitles(state.file,$('language').value,video.duration,status);renderCues();preview();status('Subtítulos preparados. Revisa el texto antes de exportar.',100);});
+$('autoBtn').onclick=()=>task(async()=>{
+  video.pause();frameVideo.pause();
+  const report=message=>{$('subtitleStatus').textContent=message;};
+  try {state.cues=await automaticSubtitles(state.file,$('language').value,video.duration,report);renderCues();preview();report('Subtítulos preparados. Puedes corregir cada frase en el listado inferior.');}
+  catch(e){report('No se han generado los subtítulos: '+e.message);throw e;}
+});
 for(const [id,grid] of [['coverDownload',false],['gridDownload',true]]) $(id).onclick=()=>task(async()=>{await document.fonts.ready;const c=makeCanvas(1080,grid?1350:1920);drawScaled(c,paintCover,props(),grid);download(await canvasPng(c),grid?'sarnago-portada-4x5.png':'sarnago-portada.png');});
 $('renderBtn').onclick=()=>task(async()=>{
   if(!$('personName').value.trim()) throw new Error('Escribe el nombre de la persona.');
@@ -90,6 +103,6 @@ $('renderBtn').onclick=()=>task(async()=>{
   video.pause();$('downloadVideo').hidden=true;await document.fonts.ready;
   const result=await recordReel({...props(),intro,outro,quality:Number($('renderQuality').value),progress:status});
   const blob=result.isMp4?result.blob:await convertToMp4(result.blob,status);
-  if(resultUrl)URL.revokeObjectURL(resultUrl);resultUrl=URL.createObjectURL(blob);$('downloadVideo').href=resultUrl;$('downloadVideo').hidden=false;status('Vídeo terminado. Ya puedes descargarlo.',100);
+  if(resultUrl)URL.revokeObjectURL(resultUrl);resultUrl=URL.createObjectURL(blob);$('downloadVideo').href=resultUrl;$('downloadVideo').download='26CrowdfundingVideo_'+($('personName').value.trim().replace(/[<>:"/\\|?*\x00-\x1f]/g,'').replace(/\s+/g,'_')||'NOMBRE')+'.mp4';$('downloadVideo').hidden=false;status('Vídeo terminado. Ya puedes descargarlo.',100);
 });
 controls(); preview(); updateQr();document.fonts.ready.then(preview);

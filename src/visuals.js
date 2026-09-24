@@ -84,9 +84,13 @@ export function paintCover(ctx, props, grid = false) {
   const H = grid ? 1350 : 1920;
   ctx.save(); ctx.fillStyle = COLORS.night; ctx.fillRect(0, 0, 1080, H);
   const cut = grid ? 775 : 1180;
-  imageFit(ctx, props.photo, 0, 125, 1080, cut - 125);
+  imageFit(ctx, props.photo, 0, 125, 1080, H - 125);
+  const fade = ctx.createLinearGradient(0, cut - 310, 0, H);
+  fade.addColorStop(0, 'rgba(24,33,43,0)');
+  fade.addColorStop(.42, 'rgba(24,33,43,.88)');
+  fade.addColorStop(1, 'rgba(24,33,43,1)');
+  ctx.fillStyle = fade; ctx.fillRect(0, cut - 310, 1080, H - cut + 310);
   header(ctx, props.logo);
-  line(ctx, cut, 0, 1080);
   ctx.fillStyle = COLORS.earth;
   ctx.font = '600 24px "DM Sans", Arial, sans-serif';
   ctx.textAlign = 'left';
