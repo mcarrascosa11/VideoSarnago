@@ -31,7 +31,7 @@ export function toSrt(cues) {
     .map((c, i) => String(i + 1) + '\n' + formatClock(c.start, true) + ' --> ' + formatClock(c.end, true) + '\n' + c.text.trim() + '\n').join('\n');
 }
 
-// Group aligned words without inventing timings from character counts.
+// Preserve model segment boundaries without inventing timings from character counts.
 export function normalizeWhisper(chunks, duration) {
   const words = (chunks || []).map((c,i) => {
     const text=String(c.text || '').trim().replace(/\s+/g,' ');

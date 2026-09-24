@@ -14,7 +14,7 @@ self.onmessage = async ({data}) => {
       });
     }
     report('Transcribiendo el audio. Las frases aparecerán aquí al terminar…');
-    const result=await model(data.wave,{language:data.language || 'spanish',task:'transcribe',chunk_length_s:25,stride_length_s:5,return_timestamps:'word',no_repeat_ngram_size:6});
+    const result=await model(data.wave,{language:data.language || 'spanish',task:'transcribe',chunk_length_s:25,stride_length_s:5,return_timestamps:true,no_repeat_ngram_size:6});
     self.postMessage({type:'result',chunks:result.chunks});
   } catch(e) { model=null;self.postMessage({type:'error',message:e.message || String(e)}); }
 };

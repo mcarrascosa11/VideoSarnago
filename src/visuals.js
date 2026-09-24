@@ -130,9 +130,9 @@ export function paintFrame(ctx, props) {
   imageFit(ctx, props.video, 0, 0, 1080, 1775);
   const cue = activeCue(props.cues, props.time || 0);
   if (cue) {
-    ctx.font = '600 56px "DM Sans", Arial, sans-serif';
+    ctx.font = '600 ' + (cue.text.length > 160 ? 36 : cue.text.length > 100 ? 44 : 56) + 'px "DM Sans", Arial, sans-serif';
     ctx.textAlign = 'center';
-    const words = wrapLines(ctx, cue.text, 900, 3);
+    const words = wrapLines(ctx, cue.text, 900, 8);
     const h = words.length * 72 + 38;
     const y = 1660 - h;
     ctx.fillStyle = COLORS.night;
