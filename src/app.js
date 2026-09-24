@@ -10,7 +10,7 @@ const state = {file:null, photo:null, logo:null, qrImage:null, cues:[], mode:'co
 const video = $('previewVideo');
 const frameVideo = $('frameVideo');
 let sourceUrl, resultUrl, qrVersion = 0;
-const settings = ['campaignUrl','outroSecs','renderQuality','language'];
+const settings = ['campaignUrl','outroSecs','renderQuality','language','musicVolume'];
 try { const saved = JSON.parse(localStorage.getItem('sarnago-settings') || '{}'); settings.forEach(k => {if (saved[k] !== undefined) $(k).value = saved[k];}); } catch {}
 function status(message, pct) {
   $('progressBox').hidden = false;
@@ -71,7 +71,9 @@ async function updateQr() {
     if(version===qrVersion){state.qrImage=img;preview();}
   } catch {status('Introduce un enlace completo válido para generar el QR.');}
 }
-for(const id of settings) $(id).addEventListener('change',()=>{try{localStorage.setItem('sarnago-settings',JSON.stringify(Object.fromEntries(settings.map(k=>[k,$(k).value]))));}catch{} if(id==='campaignUrl') updateQr();});
+function updateMusicLabel(){ $('musicVolumeValue').textContent = `${Number($('musicVolume').value).toLocaleString('es-ES',{maximumFractionDigits:1})}%`; }
+for(const id of settings) $(id).addEventListener('change',()=>{try{localStorage.setItem('sarnago-settings',JSON.stringify(Object.fromEntries(settings.map(k=>[k,$(k).value]))));}catch{} if(id==='campaignUrl') updateQr(); if(id==='musicVolume') updateMusicLabel();});
+updateMusicLabel();
 for(const id of ['personName','personRole']) $(id).addEventListener('input',preview);
 for(const [id,mode] of [['showCover','cover'],['showOutro','outro'],['showLive','live']]) $(id).onclick=()=>{state.mode=mode; document.querySelectorAll('.preview-switch button').forEach(b=>b.classList.toggle('selected',b.id===id)); video.classList.toggle('hidden',mode!=='live'); if(mode!=='live')video.pause(); preview();};
 video.addEventListener('timeupdate',preview); video.addEventListener('seeked',preview);
@@ -101,7 +103,7 @@ $('renderBtn').onclick=()=>task(async()=>{
   if(!Number.isFinite(outro)||outro<2||outro>12)throw new Error('Revisa la duración del cierre (2–12 s).');
   if(state.cues.some(c=>!Number.isFinite(c.start)||!Number.isFinite(c.end)||c.start<0||c.end<=c.start||c.end>video.duration+.1))throw new Error('Revisa los tiempos de los subtítulos.');
   video.pause();$('downloadVideo').hidden=true;await document.fonts.ready;
-  const result=await recordReel({...props(),outro,quality:Number($('renderQuality').value),progress:status});
+  const result=await recordReel({...props(),outro,quality:Number($('renderQuality').value),musicVolume:Number($('musicVolume').value),progress:status});
   const blob=await convertToMp4(result.blob,status,Number($('renderQuality').value));
   if(resultUrl)URL.revokeObjectURL(resultUrl);resultUrl=URL.createObjectURL(blob);$('downloadVideo').href=resultUrl;$('downloadVideo').download='26CrowdfundingVideo_'+($('personName').value.trim().replace(/[<>:"/\\|?*\x00-\x1f]/g,'').replace(/\s+/g,'_')||'NOMBRE')+'.mp4';$('downloadVideo').hidden=false;status('Vídeo terminado. Ya puedes descargarlo.',100);
 });

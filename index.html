@@ -39,6 +39,7 @@
             <label class="logo-upload">Logotipo de Sarnago (opcional)<input id="logoInput" type="file" accept="image/*"><small id="logoLabel">Seleccionar PNG transparente</small></label>
             <div class="two short"><label>Cierre <span class="unit">segundos</span><input type="number" id="outroSecs" value="4.5" min="2" max="12" step="0.5"></label></div>
             <label>Calidad de salida<select id="renderQuality"><option value="720">720 × 1280 · más rápido</option><option value="1080">1080 × 1920 · alta calidad</option></select></label>
+            <label>Música de fondo <output id="musicVolumeValue">7,5%</output><input type="range" id="musicVolume" min="0" max="20" step="0.5" value="7.5"><small>0% para silenciarla · 20% máximo</small></label>
           </div>
           <div class="step delivery"><div class="step-title"><span class="step-num">04</span><div><h2>Exportación</h2><p>El Reel empieza directamente con el vídeo, con subtítulos, footer y cierre. La portada se descarga aparte. Incluye música ambiental suave a volumen bajo.</p></div></div>
             <button id="coverDownload" class="secondary wide" disabled>Descargar portada vertical · PNG</button>

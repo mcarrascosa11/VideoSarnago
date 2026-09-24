@@ -37,7 +37,7 @@ async function holdFrame(seconds, render) {
   });
 }
 
-export async function recordReel({file, name, role, photo, logo, qrImage, shortUrl, cues, outro, quality, progress}) {
+export async function recordReel({file, name, role, photo, logo, qrImage, shortUrl, cues, outro, quality, musicVolume = 7.5, progress}) {
   if (!file) throw new Error('Debes seleccionar un vídeo.');
   const mime = supportedRecordingMime();
   if (!mime) throw new Error('Este navegador no permite grabar vídeo. Prueba con Chrome actualizado.');
@@ -55,7 +55,7 @@ export async function recordReel({file, name, role, photo, logo, qrImage, shortU
   music.preload = 'auto'; music.loop = true; music.crossOrigin = 'anonymous';
   const musicSource = audio.createMediaElementSource(music);
   const musicGain = audio.createGain();
-  musicGain.gain.value = 0.075;
+  musicGain.gain.value = Math.max(0, Math.min(0.2, Number(musicVolume) / 100));
   const audioOut = audio.createMediaStreamDestination();
   audioSource.connect(audioOut);
   musicSource.connect(musicGain).connect(audioOut);
