@@ -3,3 +3,5 @@
 [hidden]{display:none!important}.preview-canvas-wrap:has(video:not(.hidden)){overflow:visible;margin-bottom:110px}.preview-canvas-wrap video:not(.hidden){height:84px;position:absolute;top:100%;margin-top:10px;background:#101820}.cue-row textarea{min-width:0;resize:vertical;font:inherit;min-height:64px}
 
 #framePicker{margin:16px 0;padding:16px;background:#e7e0d5}#frameVideo{display:block;width:100%;max-height:340px;background:#101820;margin-bottom:12px}#frameTime{padding:0;width:100%;accent-color:#897051}#framePosition{font-size:12px}#subtitleStatus{font-size:13px;line-height:1.6;white-space:pre-wrap;color:#735024}.cue-list{max-height:520px;overflow:auto}.cue-row textarea{background:#fffdf8;border:1px solid #c7c2b6;padding:10px;line-height:1.5}
+
+.cue-row.needs-review{border-left:4px solid #bb7628;background:#fff2db}

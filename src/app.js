@@ -1,7 +1,7 @@
 import './styles.css';
 import QRCode from 'qrcode';
 import {makeCanvas, drawScaled, paintCover, paintFrame, paintOutro, canvasPng} from './visuals.js';
-import {parseSrt, toSrt} from './subtitles.js';
+import {parseSrt, toSrt, needsReview} from './subtitles.js';
 import {automaticSubtitles, convertToMp4} from './transcribe.js';
 import {recordReel} from './media.js';
 
@@ -78,7 +78,7 @@ video.addEventListener('timeupdate',preview); video.addEventListener('seeked',pr
 function renderCues() {
   $('cues').replaceChildren(); $('cueCount').textContent=state.cues.length;
   state.cues.forEach((cue,i)=>{
-    const row=document.createElement('div'); row.className='cue-row';
+    const row=document.createElement('div'); row.className='cue-row'; if(needsReview(cue)){row.classList.add('needs-review');row.title='Revisa esta frase: repetición o demasiado texto para su duración.';}
     for(const key of ['start','end']) {const input=document.createElement('input'); input.type='number';input.min='0';input.step='0.1';input.value=cue[key];input.setAttribute('aria-label',key==='start'?'Inicio en segundos':'Fin en segundos');input.onchange=()=>{cue[key]=Number(input.value);preview();};row.append(input);}
     const text=document.createElement('textarea');text.value=cue.text;text.setAttribute('aria-label','Texto del subtítulo');text.oninput=()=>{cue.text=text.value;preview();};row.append(text);
     const remove=document.createElement('button');remove.textContent='×';remove.setAttribute('aria-label','Eliminar subtítulo');remove.onclick=()=>{state.cues.splice(i,1);renderCues();preview();};row.append(remove);$('cues').append(row);
@@ -90,7 +90,7 @@ $('exportSrt').onclick=()=>download(new Blob([toSrt(state.cues)],{type:'text/pla
 $('autoBtn').onclick=()=>task(async()=>{
   video.pause();frameVideo.pause();
   const report=message=>{$('subtitleStatus').textContent=message;};
-  try {state.cues=await automaticSubtitles(state.file,$('language').value,video.duration,report);renderCues();preview();report('Subtítulos preparados. Puedes corregir cada frase en el listado inferior.');}
+  try {state.cues=await automaticSubtitles(state.file,$('language').value,video.duration,report);renderCues();preview();const doubtful=state.cues.filter(needsReview).length;report('Subtítulos preparados con Whisper Small. Puedes editar cada frase.'+(doubtful?' Hay '+doubtful+' fragmentos marcados para revisar por repetición o duración.':''));}
   catch(e){report('No se han generado los subtítulos: '+(e?.message || String(e)));throw e;}
 });
 for(const [id,grid] of [['coverDownload',false],['gridDownload',true]]) $(id).onclick=()=>task(async()=>{await document.fonts.ready;const c=makeCanvas(1080,grid?1350:1920);drawScaled(c,paintCover,props(),grid);download(await canvasPng(c),grid?'sarnago-portada-4x5.png':'sarnago-portada.png');});

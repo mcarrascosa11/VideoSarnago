@@ -30,7 +30,7 @@
           </div>
           <div class="step"><div class="step-title"><span class="step-num">02</span><div><h2>Subtítulos</h2><p>Generación automática en tu navegador y corrección antes de exportar.</p></div></div>
             <div class="subtitle-actions"><button class="secondary" id="autoBtn" disabled>Generar automáticamente</button><label class="file-inline">Importar .SRT<input id="srtInput" type="file" accept=".srt,text/plain"></label><select id="language" aria-label="Idioma"><option value="spanish">Español</option><option value="english">Inglés</option><option value="catalan">Catalán</option><option value="french">Francés</option></select></div>
-            <p id="subtitleStatus" role="status" aria-live="polite"></p><p class="hint">La primera transcripción descarga un modelo de voz (Whisper). Puede tardar varios minutos. Revisa nombres propios y tiempos.</p>
+            <p id="subtitleStatus" role="status" aria-live="polite"></p><p class="hint">Whisper Small multilingüe · La primera vez descarga un modelo más grande y puede tardar varios minutos. Revisa nombres propios y los fragmentos marcados en amarillo.</p>
             <div class="subtitle-header"><b>Fragmentos <span id="cueCount">0</span></b><div><button type="button" class="text-btn" id="addCue">+ Añadir</button> <button type="button" class="text-btn" id="exportSrt">Descargar SRT</button></div></div>
             <div id="cues" class="cue-list"><p class="empty">Todavía no hay subtítulos. Puedes crearlos automáticamente o importar un SRT.</p></div>
           </div>

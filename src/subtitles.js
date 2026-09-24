@@ -31,34 +31,31 @@ export function toSrt(cues) {
     .map((c, i) => String(i + 1) + '\n' + formatClock(c.start, true) + ' --> ' + formatClock(c.end, true) + '\n' + c.text.trim() + '\n').join('\n');
 }
 
+// Group aligned words without inventing timings from character counts.
 export function normalizeWhisper(chunks, duration) {
-  const result = [];
-  for (const c of chunks || []) {
-    const text = String(c.text || '').trim().replace(/\s+/g, ' ');
-    let a = Math.max(0, Number(c.timestamp?.[0] || 0));
-    let b = Number(c.timestamp?.[1] ?? duration ?? a + 3);
-    if (!Number.isFinite(b)) b = a + 3;
-    if (duration) b = Math.min(b, duration);
-    if (!text || b <= a) continue;
-    const words = text.split(/\s+/);
-    const chunksOfWords = [];
-    let group = [];
-    for (const word of words) {
-      if (group.length >= 9 || (group.join(' ').length + word.length > 68 && group.length >= 4)) {
-        chunksOfWords.push(group); group = [];
-      }
-      group.push(word);
-      if (/[.!?]$/.test(word) && group.length >= 4) { chunksOfWords.push(group); group = []; }
-    }
-    if (group.length) chunksOfWords.push(group);
-    let cursor = a;
-    const totalChars = chunksOfWords.reduce((sum, w) => sum + w.join(' ').length, 0);
-    for (let i = 0; i < chunksOfWords.length; i++) {
-      const part = chunksOfWords[i].join(' ');
-      const end = i === chunksOfWords.length - 1 ? b : Math.min(b, cursor + (b - a) * part.length / totalChars);
-      result.push({start: +cursor.toFixed(2), end: +end.toFixed(2), text: part});
-      cursor = end;
-    }
+  const words = (chunks || []).map((c,i) => {
+    const text=String(c.text || '').trim().replace(/\s+/g,' ');
+    const start=Number(c.timestamp?.[0]);
+    const end=Number(c.timestamp?.[1] ?? chunks[i+1]?.timestamp?.[0] ?? duration);
+    return {text,start:Math.max(0,start),end:Math.min(end,duration || Infinity)};
+  }).filter(w=>w.text && Number.isFinite(w.start) && Number.isFinite(w.end) && w.end>=w.start);
+  const result=[];let group=null;
+  const flush=()=>{if(group && group.end>group.start) result.push(group);group=null;};
+  for(const word of words){
+    if(group && (word.start-group.end>.7 || word.end-group.start>5 || group.text.length+word.text.length>68)) flush();
+    if(!group)group={...word};
+    else {group.text+=' '+word.text;group.end=Math.max(group.end,word.end);}
+    if(/[.!?]$/.test(word.text))flush();
   }
-  return result.filter(c => c.end - c.start > .12);
+  flush();return result;
+}
+
+export function needsReview(cue) {
+  const words=cue.text.toLowerCase().replace(/[.,!?;:]/g,'').split(/\s+/);
+  const seen=new Map();
+  for(let i=0;i+2<words.length;i++){
+    const phrase=words.slice(i,i+3).join(' ');seen.set(phrase,(seen.get(phrase)||0)+1);
+    if(seen.get(phrase)>=3)return true;
+  }
+  return cue.text.length / Math.max(.01,cue.end-cue.start)>30;
 }
