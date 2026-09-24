@@ -69,10 +69,8 @@ export async function recordReel({file, name, role, photo, logo, qrImage, shortU
     const finished = new Promise((resolve, reject) => {stopResolve = resolve; stopReject = reject;});
     recorder.addEventListener('stop', () => stopResolve(), {once:true});
     await audio.resume();
-    drawScaled(canvas, props);
+    drawScaled(canvas, paintFrame, {...props,video,time:0});
     recorder.start(1000);
-    progress('Creando carátula…', 0);
-    await holdFrame(intro, () => drawScaled(canvas, props));
     await video.play();
     progress('Grabando el vídeo…', 5);
     const playback = new Promise((resolve, reject) => {
