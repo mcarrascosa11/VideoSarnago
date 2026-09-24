@@ -10,7 +10,7 @@ const state = {file:null, photo:null, logo:null, qrImage:null, cues:[], mode:'co
 const video = $('previewVideo');
 const frameVideo = $('frameVideo');
 let sourceUrl, resultUrl, qrVersion = 0;
-const settings = ['campaignUrl','introSecs','outroSecs','renderQuality','language'];
+const settings = ['campaignUrl','outroSecs','renderQuality','language'];
 try { const saved = JSON.parse(localStorage.getItem('sarnago-settings') || '{}'); settings.forEach(k => {if (saved[k] !== undefined) $(k).value = saved[k];}); } catch {}
 function status(message, pct) {
   $('progressBox').hidden = false;
@@ -97,12 +97,12 @@ for(const [id,grid] of [['coverDownload',false],['gridDownload',true]]) $(id).on
 $('renderBtn').onclick=()=>task(async()=>{
   if(!$('personName').value.trim()) throw new Error('Escribe el nombre de la persona.');
   await updateQr(); if(!state.qrImage) throw new Error('Introduce el enlace real del crowdfunding antes de exportar.');
-  const intro=Number($('introSecs').value),outro=Number($('outroSecs').value);
-  if(!Number.isFinite(intro)||intro<0||intro>8||!Number.isFinite(outro)||outro<2||outro>12)throw new Error('Revisa la duración de inicio (0–8 s) y cierre (2–12 s).');
+  const outro=Number($('outroSecs').value);
+  if(!Number.isFinite(outro)||outro<2||outro>12)throw new Error('Revisa la duración del cierre (2–12 s).');
   if(state.cues.some(c=>!Number.isFinite(c.start)||!Number.isFinite(c.end)||c.start<0||c.end<=c.start||c.end>video.duration+.1))throw new Error('Revisa los tiempos de los subtítulos.');
   video.pause();$('downloadVideo').hidden=true;await document.fonts.ready;
-  const result=await recordReel({...props(),intro,outro,quality:Number($('renderQuality').value),progress:status});
-  const blob=result.isMp4?result.blob:await convertToMp4(result.blob,status);
+  const result=await recordReel({...props(),outro,quality:Number($('renderQuality').value),progress:status});
+  const blob=await convertToMp4(result.blob,status,Number($('renderQuality').value));
   if(resultUrl)URL.revokeObjectURL(resultUrl);resultUrl=URL.createObjectURL(blob);$('downloadVideo').href=resultUrl;$('downloadVideo').download='26CrowdfundingVideo_'+($('personName').value.trim().replace(/[<>:"/\\|?*\x00-\x1f]/g,'').replace(/\s+/g,'_')||'NOMBRE')+'.mp4';$('downloadVideo').hidden=false;status('Vídeo terminado. Ya puedes descargarlo.',100);
 });
 controls(); preview(); updateQr();document.fonts.ready.then(preview);

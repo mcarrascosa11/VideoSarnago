@@ -37,16 +37,16 @@
           <div class="step"><div class="step-title"><span class="step-num">03</span><div><h2>Ajustes de campaña</h2><p>Se guardan únicamente en este navegador.</p></div></div>
             <label>Enlace de la campaña de Goteo<input id="campaignUrl" type="url" placeholder="https://www.goteo.org/project/..." autocomplete="off"></label>
             <label class="logo-upload">Logotipo de Sarnago (opcional)<input id="logoInput" type="file" accept="image/*"><small id="logoLabel">Seleccionar PNG transparente</small></label>
-            <div class="two short"><label>Inicio <span class="unit">segundos</span><input type="number" id="introSecs" value="2.5" min="0" max="8" step="0.5"></label><label>Cierre <span class="unit">segundos</span><input type="number" id="outroSecs" value="4.5" min="2" max="12" step="0.5"></label></div>
+            <div class="two short"><label>Cierre <span class="unit">segundos</span><input type="number" id="outroSecs" value="4.5" min="2" max="12" step="0.5"></label></div>
             <label>Calidad de salida<select id="renderQuality"><option value="720">720 × 1280 · más rápido</option><option value="1080">1080 × 1920 · alta calidad</option></select></label>
           </div>
-          <div class="step delivery"><div class="step-title"><span class="step-num">04</span><div><h2>Exportación</h2><p>Portada independiente y Reel con carátula, subtítulos, footer y cierre.</p></div></div>
+          <div class="step delivery"><div class="step-title"><span class="step-num">04</span><div><h2>Exportación</h2><p>El Reel empieza directamente con el vídeo, con subtítulos, footer y cierre. La portada se descarga aparte.</p></div></div>
             <button id="coverDownload" class="secondary wide" disabled>Descargar portada vertical · PNG</button>
             <button id="gridDownload" class="secondary wide" disabled>Descargar portada para cuadrícula · PNG 4:5</button>
             <button id="renderBtn" class="primary wide" disabled>Crear Reel · MP4 ↗</button>
             <div id="progressBox" class="progress-box" hidden><div class="progress-label"><span id="progressText">Preparando...</span><span id="progressPct"></span></div><div class="progress-track"><div id="progressFill"></div></div></div>
             <a id="downloadVideo" class="primary wide download-link" hidden download="26CrowdfundingVideo_NOMBRE.mp4">Descargar vídeo terminado ↓</a>
-            <p class="hint">La grabación tarda aproximadamente lo que dura el vídeo. Mantén esta pestaña visible y el ordenador activo.</p>
+            <p class="hint">La grabación tarda aproximadamente lo que dura el vídeo, más la preparación del MP4 vertical. Mantén esta pestaña visible y el ordenador activo.</p>
           </div>
         </section>
         <aside class="preview"><div class="preview-head"><span>VISTA PREVIA</span><div class="preview-switch"><button id="showCover" class="selected">Portada</button><button id="showOutro">Cierre</button><button id="showLive">Vídeo</button></div></div><div class="preview-canvas-wrap"><canvas id="previewCanvas" width="540" height="960" aria-label="Vista previa de la composición"></canvas><video id="previewVideo" class="hidden" controls playsinline></video></div><div class="preview-caption"><span>FORMATO 09:16</span><span>1080 × 1920</span></div><p class="preview-note">Fotografía real · tipografía editorial · arquitectura y memoria.<br>Identidad constante, sin efectos ni filtros añadidos.</p></aside>

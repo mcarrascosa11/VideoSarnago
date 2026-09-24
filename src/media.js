@@ -1,4 +1,4 @@
-import {makeCanvas, drawScaled, paintCover, paintFrame, paintOutro} from './visuals.js';
+import {makeCanvas, drawScaled, paintFrame, paintOutro} from './visuals.js';
 
 export function supportedRecordingMime() {
   const types = [
@@ -37,7 +37,7 @@ async function holdFrame(seconds, render) {
   });
 }
 
-export async function recordReel({file, name, role, photo, logo, qrImage, shortUrl, cues, intro, outro, quality, progress}) {
+export async function recordReel({file, name, role, photo, logo, qrImage, shortUrl, cues, outro, quality, progress}) {
   if (!file) throw new Error('Debes seleccionar un vídeo.');
   const mime = supportedRecordingMime();
   if (!mime) throw new Error('Este navegador no permite grabar vídeo. Prueba con Chrome actualizado.');
@@ -59,7 +59,7 @@ export async function recordReel({file, name, role, photo, logo, qrImage, shortU
   let raf = 0;
   const listenError = e => console.error('VideoSarnago recorder', e);
   try {
-    if (video.readyState < 1) await waitForEvent(video, 'loadedmetadata');
+    if (video.readyState < 2) await waitForEvent(video, 'loadeddata');
     const length = video.duration;
     if (!Number.isFinite(length) || length <= 0) throw new Error('No se pudo obtener la duración del vídeo.');
     recorder = new MediaRecorder(combined, {mimeType:mime, videoBitsPerSecond:quality === 1080 ? 6_000_000 : 3_300_000, audioBitsPerSecond:128_000});
@@ -69,10 +69,10 @@ export async function recordReel({file, name, role, photo, logo, qrImage, shortU
     const finished = new Promise((resolve, reject) => {stopResolve = resolve; stopReject = reject;});
     recorder.addEventListener('stop', () => stopResolve(), {once:true});
     await audio.resume();
-    drawScaled(canvas, paintCover, props);
+    drawScaled(canvas, props);
     recorder.start(1000);
     progress('Creando carátula…', 0);
-    await holdFrame(intro, () => drawScaled(canvas, paintCover, props));
+    await holdFrame(intro, () => drawScaled(canvas, props));
     await video.play();
     progress('Grabando el vídeo…', 5);
     const playback = new Promise((resolve, reject) => {

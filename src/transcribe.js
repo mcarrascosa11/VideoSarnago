@@ -1,3 +1,4 @@
+import {portraitMp4Args} from './video-format.js';
 import {normalizeWhisper} from './subtitles.js';
 
 let ffmpegInstance = null;
@@ -67,15 +68,15 @@ export async function automaticSubtitles(file, language, length, status = () => 
   }
 }
 
-export async function convertToMp4(blob, status = () => {}) {
+export async function convertToMp4(blob, status = () => {}, quality = 720) {
   const ffmpeg = await getFfmpeg(status);
   const {fetchFile} = await import('@ffmpeg/util');
-  const input = 'video_render_' + Date.now() + '.webm';
+  const input = 'video_render_' + Date.now() + (blob.type.includes('mp4') ? '.mp4' : '.webm');
   const output = 'video_output_' + Date.now() + '.mp4';
   try {
-    status('Convirtiendo WebM a MP4 en tu ordenador…');
+    status('Preparando MP4 vertical 9:16 compatible…');
     await ffmpeg.writeFile(input, await fetchFile(blob));
-    const exit = await ffmpeg.exec(['-i',input,'-c:v','libx264','-preset','ultrafast','-crf','25','-pix_fmt','yuv420p','-c:a','aac','-b:a','128k','-movflags','+faststart',output]);
+    const exit = await ffmpeg.exec(portraitMp4Args(input,output,quality));
     if (exit !== 0) throw new Error('La conversión MP4 ha fallado.');
     const bytes = await ffmpeg.readFile(output);
     const copied = bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength);
