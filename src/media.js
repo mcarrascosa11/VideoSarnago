@@ -50,8 +50,15 @@ export async function recordReel({file, name, role, photo, logo, qrImage, shortU
   video.src = url; video.playsInline = true; video.preload = 'auto';
   const audio = new (window.AudioContext || window.webkitAudioContext)();
   const audioSource = audio.createMediaElementSource(video);
+  const music = document.createElement('audio');
+  music.src = '/music/first-light-particles.mp3';
+  music.preload = 'auto'; music.loop = true; music.crossOrigin = 'anonymous';
+  const musicSource = audio.createMediaElementSource(music);
+  const musicGain = audio.createGain();
+  musicGain.gain.value = 0.075;
   const audioOut = audio.createMediaStreamDestination();
   audioSource.connect(audioOut);
+  musicSource.connect(musicGain).connect(audioOut);
   const frames = canvas.captureStream(25);
   const combined = new MediaStream([...frames.getVideoTracks(), ...audioOut.stream.getAudioTracks()]);
   let recorder;
@@ -69,6 +76,7 @@ export async function recordReel({file, name, role, photo, logo, qrImage, shortU
     const finished = new Promise((resolve, reject) => {stopResolve = resolve; stopReject = reject;});
     recorder.addEventListener('stop', () => stopResolve(), {once:true});
     await audio.resume();
+    try { await music.play(); } catch { throw new Error('No se pudo cargar la música de fondo.'); }
     drawScaled(canvas, paintFrame, {...props,video,time:0});
     recorder.start(1000);
     await video.play();
@@ -101,7 +109,7 @@ export async function recordReel({file, name, role, photo, logo, qrImage, shortU
     if (recorder && recorder.state !== 'inactive') recorder.stop();
     combined.getTracks().forEach(t => t.stop());
     frames.getTracks().forEach(t => t.stop());
-    video.pause(); video.removeAttribute('src'); video.load();
+    video.pause(); music.pause(); video.removeAttribute('src'); video.load(); music.removeAttribute('src'); music.load();
     URL.revokeObjectURL(url);
     await audio.close().catch(() => {});
   }
