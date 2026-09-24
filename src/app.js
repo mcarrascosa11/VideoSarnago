@@ -91,7 +91,7 @@ $('autoBtn').onclick=()=>task(async()=>{
   video.pause();frameVideo.pause();
   const report=message=>{$('subtitleStatus').textContent=message;};
   try {state.cues=await automaticSubtitles(state.file,$('language').value,video.duration,report);renderCues();preview();report('Subtítulos preparados. Puedes corregir cada frase en el listado inferior.');}
-  catch(e){report('No se han generado los subtítulos: '+e.message);throw e;}
+  catch(e){report('No se han generado los subtítulos: '+(e?.message || String(e)));throw e;}
 });
 for(const [id,grid] of [['coverDownload',false],['gridDownload',true]]) $(id).onclick=()=>task(async()=>{await document.fonts.ready;const c=makeCanvas(1080,grid?1350:1920);drawScaled(c,paintCover,props(),grid);download(await canvasPng(c),grid?'sarnago-portada-4x5.png':'sarnago-portada.png');});
 $('renderBtn').onclick=()=>task(async()=>{

@@ -21,7 +21,7 @@ export async function getFfmpeg(status = () => {}) {
       }))(),
       new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('No se pudo cargar el motor de audio. Recarga la página y comprueba la conexión.')),90000);})
     ]);
-  } catch(e) {ffmpeg.terminate();throw e;}
+  } catch(e) {ffmpeg.terminate();throw new Error(e?.message || String(e));}
   finally {clearTimeout(timer);}
   ffmpegInstance = ffmpeg;
   return ffmpeg;
