@@ -105,6 +105,6 @@ $('renderBtn').onclick=()=>task(async()=>{
   video.pause();$('downloadVideo').hidden=true;await document.fonts.ready;
   const result=await recordReel({...props(),outro,quality:Number($('renderQuality').value),musicVolume:Number($('musicVolume').value),progress:status});
   const blob=await convertToMp4(result.blob,status,Number($('renderQuality').value));
-  if(resultUrl)URL.revokeObjectURL(resultUrl);resultUrl=URL.createObjectURL(blob);$('downloadVideo').href=resultUrl;$('downloadVideo').download='26CrowdfundingVideo_'+($('personName').value.trim().replace(/[<>:"/\\|?*\x00-\x1f]/g,'').replace(/\s+/g,'_')||'NOMBRE')+'.mp4';$('downloadVideo').hidden=false;status('Vídeo terminado. Ya puedes descargarlo.',100);
+  if(resultUrl)URL.revokeObjectURL(resultUrl);resultUrl=URL.createObjectURL(blob);$('downloadVideo').href=resultUrl;$('downloadVideo').download='26CrowdfundingVideo_'+($('personName').value.trim().replace(/[<>:"/\\|?*\x00-\x1f]/g,'').replace(/\s+/g,'_')||'NOMBRE')+'.mp4';$('downloadVideo').hidden=false;status(result.musicWarning ? `Vídeo terminado. Ya puedes descargarlo. ${result.musicWarning}` : 'Vídeo terminado. Ya puedes descargarlo.',100);
 });
 controls(); preview(); updateQr();document.fonts.ready.then(preview);

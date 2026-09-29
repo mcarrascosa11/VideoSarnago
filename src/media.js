@@ -1,4 +1,5 @@
 import {makeCanvas, drawScaled, paintFrame, paintOutro} from './visuals.js';
+import {startMusic} from './music.js';
 
 export function supportedRecordingMime() {
   const types = [
@@ -51,8 +52,6 @@ export async function recordReel({file, name, role, photo, logo, qrImage, shortU
   const audio = new (window.AudioContext || window.webkitAudioContext)();
   const audioSource = audio.createMediaElementSource(video);
   const music = document.createElement('audio');
-  music.src = '/music/first-light-particles.mp3';
-  music.preload = 'auto'; music.loop = true; music.crossOrigin = 'anonymous';
   const musicSource = audio.createMediaElementSource(music);
   const musicGain = audio.createGain();
   musicGain.gain.value = Math.max(0, Math.min(0.2, Number(musicVolume) / 100));
@@ -76,7 +75,7 @@ export async function recordReel({file, name, role, photo, logo, qrImage, shortU
     const finished = new Promise((resolve, reject) => {stopResolve = resolve; stopReject = reject;});
     recorder.addEventListener('stop', () => stopResolve(), {once:true});
     await audio.resume();
-    try { await music.play(); } catch { throw new Error('No se pudo cargar la música de fondo.'); }
+    const musicWarning = await startMusic({music, gain: musicGain, volume: musicVolume});
     drawScaled(canvas, paintFrame, {...props,video,time:0});
     recorder.start(1000);
     await video.play();
@@ -103,7 +102,7 @@ export async function recordReel({file, name, role, photo, logo, qrImage, shortU
     await finished;
     const blob = new Blob(parts, {type:mime.split(';')[0]});
     if (!blob.size) throw new Error('La grabación resultó vacía.');
-    return {blob, isMp4: mime.startsWith('video/mp4')};
+    return {blob, isMp4: mime.startsWith('video/mp4'), musicWarning};
   } finally {
     cancelAnimationFrame(raf);
     if (recorder && recorder.state !== 'inactive') recorder.stop();
