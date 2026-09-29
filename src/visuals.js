@@ -128,6 +128,13 @@ export function paintFrame(ctx, props) {
   ctx.save();
   ctx.fillStyle = COLORS.deep; ctx.fillRect(0, 0, 1080, 1920);
   imageFit(ctx, props.video, 0, 0, 1080, 1775);
+  ctx.restore();
+  paintOverlay(ctx, props);
+}
+
+// Transparent artwork, independent of video playback and browser frame scheduling.
+export function paintOverlay(ctx, props) {
+  ctx.save();
   const cue = activeCue(props.cues, props.time || 0);
   if (cue) {
     ctx.font = '600 ' + (cue.text.length > 160 ? 36 : cue.text.length > 100 ? 44 : 56) + 'px "DM Sans", Arial, sans-serif';

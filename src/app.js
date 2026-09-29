@@ -2,8 +2,8 @@ import './styles.css';
 import QRCode from 'qrcode';
 import {makeCanvas, drawScaled, paintCover, paintFrame, paintOutro, canvasPng} from './visuals.js';
 import {parseSrt, toSrt, needsReview} from './subtitles.js';
-import {automaticSubtitles, convertToMp4} from './transcribe.js';
-import {recordReel} from './media.js';
+import {automaticSubtitles} from './transcribe.js';
+import {exportReel} from './offline-export.js';
 
 const $ = id => document.getElementById(id);
 const state = {file:null, photo:null, logo:null, qrImage:null, cues:[], mode:'cover', busy:false};
@@ -102,9 +102,9 @@ $('renderBtn').onclick=()=>task(async()=>{
   const outro=Number($('outroSecs').value);
   if(!Number.isFinite(outro)||outro<2||outro>12)throw new Error('Revisa la duración del cierre (2–12 s).');
   if(state.cues.some(c=>!Number.isFinite(c.start)||!Number.isFinite(c.end)||c.start<0||c.end<=c.start||c.end>video.duration+.1))throw new Error('Revisa los tiempos de los subtítulos.');
-  video.pause();$('downloadVideo').hidden=true;await document.fonts.ready;
-  const result=await recordReel({...props(),outro,quality:Number($('renderQuality').value),musicVolume:Number($('musicVolume').value),progress:status});
-  const blob=await convertToMp4(result.blob,status,Number($('renderQuality').value));
+  video.pause();frameVideo.pause();$('downloadVideo').hidden=true;await document.fonts.ready;
+  const result=await exportReel({...props(),outro,quality:Number($('renderQuality').value),musicVolume:Number($('musicVolume').value),progress:status});
+  const blob=result.blob;
   if(resultUrl)URL.revokeObjectURL(resultUrl);resultUrl=URL.createObjectURL(blob);$('downloadVideo').href=resultUrl;$('downloadVideo').download='26CrowdfundingVideo_'+($('personName').value.trim().replace(/[<>:"/\\|?*\x00-\x1f]/g,'').replace(/\s+/g,'_')||'NOMBRE')+'.mp4';$('downloadVideo').hidden=false;status(result.musicWarning ? `Vídeo terminado. Ya puedes descargarlo. ${result.musicWarning}` : 'Vídeo terminado. Ya puedes descargarlo.',100);
 });
 controls(); preview(); updateQr();document.fonts.ready.then(preview);
