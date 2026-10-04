@@ -1,3 +1,4 @@
+import {videoLayout} from './layout.js';
 import './styles.css';
 import QRCode from 'qrcode';
 import {makeCanvas, drawScaled, paintCover, paintFrame, paintOutro, canvasPng} from './visuals.js';
@@ -6,7 +7,7 @@ import {automaticSubtitles} from './transcribe.js';
 import {exportReel} from './offline-export.js';
 
 const $ = id => document.getElementById(id);
-const state = {file:null, photo:null, logo:null, qrImage:null, cues:[], mode:'cover', busy:false};
+const state = {file:null, photo:null, logo:null, qrImage:null, cues:[], mode:'cover', busy:false, orientation:'portrait'};
 const video = $('previewVideo');
 const frameVideo = $('frameVideo');
 let sourceUrl, resultUrl, qrVersion = 0;
@@ -52,6 +53,15 @@ $('videoInput').onchange = () => task(async () => {
   await new Promise((resolve,reject) => {video.onloadeddata = resolve; video.onerror = () => reject(new Error('No se puede leer este vídeo. Utiliza MP4 H.264.')); video.src = sourceUrl; video.load();});
   if (!Number.isFinite(video.duration) || video.duration <= 0) throw new Error('La duración del vídeo no es válida.');
   frameVideo.src=sourceUrl; frameVideo.load(); $('framePicker').hidden=false; $('frameTime').max=Math.max(0,video.duration-.05); $('frameTime').value=0;
+  state.orientation = videoLayout(video).orientation;
+  const horizontal = state.orientation === 'landscape';
+  const canvas = $('previewCanvas'); canvas.width = horizontal ? 960 : 540; canvas.height = horizontal ? 540 : 960;
+  document.querySelector('.preview-canvas-wrap').classList.toggle('landscape', horizontal);
+  document.querySelector('.preview-caption').children[0].textContent = horizontal ? 'FORMATO 16:9' : 'FORMATO 09:16';
+  document.querySelector('.preview-caption').children[1].textContent = horizontal ? '1920 × 1080' : '1080 × 1920';
+  $('renderQuality').options[0].textContent = horizontal ? '1280 × 720 · más rápido' : '720 × 1280 · más rápido';
+  $('renderQuality').options[1].textContent = horizontal ? '1920 × 1080 · alta calidad' : '1080 × 1920 · alta calidad';
+  $('coverDownload').textContent = 'Descargar portada ' + (horizontal ? 'horizontal' : 'vertical') + ' · PNG';
   state.file = file; $('videoLabel').textContent = file.name; await capture(); status('Vídeo preparado.');
 });
 $('captureBtn').onclick = () => task(async () => {
@@ -95,7 +105,7 @@ $('autoBtn').onclick=()=>task(async()=>{
   try {state.cues=await automaticSubtitles(state.file,$('language').value,video.duration,report);renderCues();preview();const doubtful=state.cues.filter(needsReview).length;report('Subtítulos preparados con Whisper Small. Puedes editar cada frase.'+(doubtful?' Hay '+doubtful+' fragmentos marcados para revisar por repetición o duración.':''));}
   catch(e){report('No se han generado los subtítulos: '+(e?.message || String(e)));throw e;}
 });
-for(const [id,grid] of [['coverDownload',false],['gridDownload',true]]) $(id).onclick=()=>task(async()=>{await document.fonts.ready;const c=makeCanvas(1080,grid?1350:1920);drawScaled(c,paintCover,props(),grid);download(await canvasPng(c),grid?'sarnago-portada-4x5.png':'sarnago-portada.png');});
+for(const [id,grid] of [['coverDownload',false],['gridDownload',true]]) $(id).onclick=()=>task(async()=>{await document.fonts.ready;const horizontal=!grid&&state.orientation==='landscape';const c=makeCanvas(horizontal?1920:1080,grid?1350:horizontal?1080:1920);drawScaled(c,paintCover,props(),grid);download(await canvasPng(c),grid?'sarnago-portada-4x5.png':'sarnago-portada.png');});
 $('renderBtn').onclick=()=>task(async()=>{
   if(!$('personName').value.trim()) throw new Error('Escribe el nombre de la persona.');
   await updateQr(); if(!state.qrImage) throw new Error('Introduce el enlace real del crowdfunding antes de exportar.');

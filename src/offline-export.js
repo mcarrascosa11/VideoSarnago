@@ -1,3 +1,4 @@
+import {videoLayout} from './layout.js';
 import {makeCanvas, drawScaled, paintCover, paintOutro, paintOverlay, canvasPng} from './visuals.js';
 import {getFfmpeg} from './transcribe.js';
 import {INTRO, FPS, overlayTimeline, bodyArgs, cardArgs, muxArgs} from './export-plan.js';
@@ -29,12 +30,13 @@ export async function exportReel(props) {
       if(exit!==0) throw new Error('No se pudo completar: '+text);
     } finally {clearTimeout(timer);}
   }
-  const w=quality===1080?1080:720, h=w*16/9;
+  const {width:w,height:h,orientation}=videoLayout(video,quality);
+  props={...props,orientation};
   const canvas=makeCanvas(w,h);
   async function png(n, painter, data, transparent=false) {
     // Separate alpha canvas: drawScaled intentionally creates an opaque context.
     const c=transparent?makeCanvas(w,h):canvas;
-    if(transparent){const ctx=c.getContext('2d');ctx.scale(w/1080,h/1920);painter(ctx,data);}
+    if(transparent){const ctx=c.getContext('2d');ctx.scale(w/(orientation==='landscape'?1920:1080),h/(orientation==='landscape'?1080:1920));painter(ctx,data);}
     else drawScaled(c,painter,data);
     return write(n,new Uint8Array(await (await canvasPng(c)).arrayBuffer()));
   }
@@ -55,7 +57,7 @@ export async function exportReel(props) {
     const overlay=await write('overlays.ffconcat',new TextEncoder().encode(list));
     const body=name('body.mp4');files.push(body);
     probing=true;
-    await run(bodyArgs(input,overlay,body,quality,bodyDuration),'Procesando fotogramas del original…',8,70,bodyDuration);
+    await run(bodyArgs(input,overlay,body,quality,bodyDuration,orientation),'Procesando fotogramas del original…',8,70,bodyDuration);
     probing=false;
     const intro=name('intro.mp4'), ending=name('ending.mp4');files.push(intro,ending);
     await run(cardArgs(cover,intro,INTRO),'Integrando portada…',78,2,INTRO);

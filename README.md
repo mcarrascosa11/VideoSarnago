@@ -23,3 +23,8 @@ npm run build
 Proyecto Vite, JavaScript nativo, canvas + MediaRecorder, qrcode, Transformers.js y FFmpeg.wasm. Despliegue estático en Vercel.
 
 **Limitaciones:** la exportación de vídeo tarda aproximadamente la duración del vídeo original, más el tiempo de transcripción; algunos navegadores necesitan conversión adicional para entregar MP4. Se recomienda Chrome actualizado en un ordenador, vídeos originales MP4 de 30–90 s y un máximo orientativo de 250 MB. Ningún vídeo ni dato personal se almacena en la web. No se genera QR hasta introducir la URL definitiva de la nueva campaña.
+## Orientación del vídeo
+
+La orientación se detecta a partir de las dimensiones decodificadas por el navegador. Los vídeos verticales mantienen su diseño y exportación actuales (720 × 1280 o 1080 × 1920). Los horizontales se exportan a 1280 × 720 o 1920 × 1080, con portada y cierre en dos columnas, subtítulos y footer adaptados. El encuadre horizontal completo se ajusta proporcionalmente al espacio disponible, con márgenes del color de marca cuando hacen falta. La portada para cuadrícula sigue siendo 4:5.
+
+Validación: `node --test export-plan.test.mjs music.test.mjs` y `npm run build`. Se han comprobado exportaciones MP4 reales en navegador con vídeo H.264 y audio AAC, en ambas orientaciones y calidades, incluyendo portada, subtítulos, footer y cierre.

@@ -81,6 +81,7 @@ function header(ctx, logo) {
 }
 
 export function paintCover(ctx, props, grid = false) {
+  if (!grid && props.orientation === 'landscape') return paintLandscapeCover(ctx, props);
   const H = grid ? 1350 : 1920;
   ctx.save(); ctx.fillStyle = COLORS.night; ctx.fillRect(0, 0, 1080, H);
   const cut = grid ? 775 : 1180;
@@ -125,6 +126,10 @@ function activeCue(cues, current) {
 }
 
 export function paintFrame(ctx, props) {
+  if (props.orientation === 'landscape') {
+    ctx.save();ctx.fillStyle=COLORS.deep;ctx.fillRect(0,0,1920,1080);
+    imageFit(ctx,props.video,0,0,1920,950,'contain');ctx.restore();paintOverlay(ctx,props);return;
+  }
   ctx.save();
   ctx.fillStyle = COLORS.deep; ctx.fillRect(0, 0, 1080, 1920);
   imageFit(ctx, props.video, 0, 0, 1080, 1775);
@@ -134,6 +139,7 @@ export function paintFrame(ctx, props) {
 
 // Transparent artwork, independent of video playback and browser frame scheduling.
 export function paintOverlay(ctx, props) {
+  if (props.orientation === 'landscape') return paintLandscapeOverlay(ctx, props);
   ctx.save();
   const cue = activeCue(props.cues, props.time || 0);
   if (cue) {
@@ -168,6 +174,7 @@ export function paintOverlay(ctx, props) {
 }
 
 export function paintOutro(ctx, props) {
+  if (props.orientation === 'landscape') return paintLandscapeOutro(ctx, props);
   ctx.save();
   ctx.fillStyle = COLORS.night; ctx.fillRect(0, 0, 1080, 1920);
   ctx.fillStyle = COLORS.earth; ctx.font = '600 28px "DM Sans", Arial, sans-serif';
@@ -212,11 +219,60 @@ export function makeCanvas(width = 1080, height = 1920) {
 
 export function drawScaled(canvas, draw, props, grid = false) {
   const ctx = canvas.getContext('2d', {alpha: false});
-  ctx.save(); ctx.setTransform(canvas.width / 1080, 0, 0, canvas.height / (grid ? 1350 : 1920), 0, 0);
+  ctx.save(); ctx.setTransform(canvas.width / (!grid && props.orientation === 'landscape' ? 1920 : 1080), 0, 0, canvas.height / (grid ? 1350 : props.orientation === 'landscape' ? 1080 : 1920), 0, 0);
   draw(ctx, props, grid);
   ctx.restore();
 }
 
 export function canvasPng(canvas) {
   return new Promise((resolve, reject) => canvas.toBlob(b => b ? resolve(b) : reject(new Error('No se pudo crear la imagen.')), 'image/png'));
+}
+function landscapeText(ctx,text,x,y,width,size,family='"DM Sans", Arial, sans-serif',maxLines=2,color=COLORS.ivory) {
+  ctx.fillStyle=color;ctx.textAlign='left';ctx.font=`600 ${size}px ${family}`;
+  wrapLines(ctx,text,width,maxLines).forEach((s,i)=>ctx.fillText(s,x,y+i*size*1.15));
+}
+function landscapeBase(ctx,props) {
+  ctx.fillStyle=COLORS.night;ctx.fillRect(0,0,1920,1080);
+  landscapeText(ctx,'SARNAGO / ABRIGAR EL REFUGIO',70,85,1500,28,undefined,1,COLORS.earth);
+  drawLogo(ctx,props.logo,1690,30,150,70);line(ctx,125,0,1920);
+}
+function paintLandscapeCover(ctx,props) {
+  ctx.save();landscapeBase(ctx,props);
+  imageFit(ctx,props.photo,0,126,1120,824,'contain');
+  landscapeText(ctx,'VOCES QUE ABRIGAN EL REFUGIO',1190,230,650,24,undefined,2,COLORS.earth);
+  const name=(props.name||'NOMBRE APELLIDOS').trim().toUpperCase();
+  const size=fitFont(ctx,name,660,94,58,'"Cormorant Garamond", Georgia, serif');
+  landscapeText(ctx,name,1190,390,660,size,'"Cormorant Garamond", Georgia, serif',4);
+  landscapeText(ctx,props.role||'Profesión / cargo',1190,810,650,29);
+  line(ctx,950,0,1920);landscapeText(ctx,'SARNAGO / TIERRAS ALTAS · SORIA',70,1020,1600,24,undefined,1,COLORS.earth);
+  landscapeText(ctx,'2026',1760,1020,100,24,undefined,1,COLORS.earth);ctx.restore();
+}
+function paintLandscapeOverlay(ctx,props) {
+  ctx.save();const cue=activeCue(props.cues,props.time||0);
+  if(cue){
+    const size=cue.text.length>160?32:cue.text.length>100?38:44;
+    ctx.font=`600 ${size}px "DM Sans", Arial, sans-serif`;ctx.textAlign='center';
+    const lines=wrapLines(ctx,cue.text,1600,8),lh=size*1.25,h=lines.length*lh+32,y=910-h;
+    ctx.fillStyle=COLORS.night;ctx.fillRect(120,y,1680,h);ctx.fillStyle=COLORS.ivory;
+    lines.forEach((s,i)=>ctx.fillText(s,960,y+16+size+i*lh));
+  }
+  ctx.fillStyle=COLORS.night;ctx.fillRect(0,950,1920,130);line(ctx,951,0,1920);
+  landscapeText(ctx,'ABRIGAR EL REFUGIO',60,1004,700,31,undefined,1);
+  landscapeText(ctx,props.shortUrl||'APOYA LA CAMPAÑA EN GOTEO',60,1050,1780,25,undefined,1,COLORS.earth);
+  if((props.time||0)<4.5&&(props.name||'').trim()){
+    ctx.fillStyle=COLORS.night;ctx.fillRect(0,70,860,150);
+    landscapeText(ctx,props.name,58,130,750,43,'"Cormorant Garamond", Georgia, serif',1);
+    landscapeText(ctx,props.role,58,183,750,22,undefined,1,COLORS.earth);
+  }ctx.restore();
+}
+function paintLandscapeOutro(ctx,props) {
+  ctx.save();landscapeBase(ctx,props);
+  landscapeText(ctx,'APÓYANOS',70,370,1100,160,'"Cormorant Garamond", Georgia, serif',1);
+  landscapeText(ctx,'Ayúdanos a seguir construyendo Sarnago.',70,500,1000,64,'"Cormorant Garamond", Georgia, serif',3);
+  landscapeText(ctx,props.shortUrl||'GOTEO.ORG',70,770,1040,33,undefined,3);
+  if(props.qrImage){ctx.fillStyle='#fff';ctx.fillRect(1280,245,500,500);ctx.drawImage(props.qrImage,1304,269,452,452);}
+  else {ctx.strokeStyle=COLORS.earth;ctx.strokeRect(1280,245,500,500);}
+  landscapeText(ctx,'ESCANEA Y COLABORA',1280,810,550,27,undefined,1,COLORS.earth);
+  line(ctx,930,70,1850);landscapeText(ctx,'SARNAGO',70,990,500,29);
+  landscapeText(ctx,'TIERRA DE NADIE, TIERRA DE TODOS',70,1040,1600,23,undefined,1,COLORS.earth);ctx.restore();
 }

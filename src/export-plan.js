@@ -8,11 +8,14 @@ export function overlayTimeline(cues, duration) {
   const sorted = [...cuts].sort((a,b)=>a-b);
   return sorted.slice(0,-1).map((start,i)=>({time:start/FPS,duration:(sorted[i+1]-start)/FPS}));
 }
-export function bodyArgs(input, overlay, output, quality, duration) {
-  const w = quality === 1080 ? 1080 : 720, h = w * 16 / 9;
-  const pictureH = Math.round(1775 * w / 1080 / 2) * 2;
+export function bodyArgs(input, overlay, output, quality, duration, orientation = 'portrait') {
+  const short = quality === 1080 ? 1080 : 720;
+  const horizontal = orientation === 'landscape';
+  const w = horizontal ? short * 16 / 9 : short, h = horizontal ? short : short * 16 / 9;
+  const pictureH = horizontal ? Math.round(950 * h / 1080 / 2) * 2 : Math.round(1775 * w / 1080 / 2) * 2;
+  const fit = horizontal ? `scale=${w}:${pictureH}:force_original_aspect_ratio=decrease,pad=${w}:${pictureH}:(ow-iw)/2:(oh-ih)/2:color=0x101820` : `scale=${w}:${pictureH}:force_original_aspect_ratio=increase,crop=${w}:${pictureH}`;
   return ['-filter_complex_threads','1','-i',input,'-f','concat','-safe','0','-i',overlay,
-    '-filter_complex',`[0:v:0]setpts=PTS-STARTPTS,fps=25,scale=${w}:${pictureH}:force_original_aspect_ratio=increase,crop=${w}:${pictureH},setsar=1,pad=${w}:${h}:0:0:color=0x101820[v];[v][1:v]overlay=0:0:eof_action=repeat:format=auto,format=yuv420p[out]`,
+    '-filter_complex',`[0:v:0]setpts=PTS-STARTPTS,fps=25,${fit},setsar=1,pad=${w}:${h}:0:0:color=0x101820[v];[v][1:v]overlay=0:0:eof_action=repeat:format=auto,format=yuv420p[out]`,
     '-map','[out]','-t',String(duration),...encodeVideo,output];
 }
 export function cardArgs(image, output, duration) {
