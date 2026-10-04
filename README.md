@@ -34,3 +34,11 @@ Validación: `node --test export-plan.test.mjs music.test.mjs` y `npm run build`
 Tras cargar un vídeo, revisa el selector de fotogramas y usa «Empezar aquí» y «Terminar aquí», o escribe los tiempos en segundos. «Reproducir recorte» reproduce el tramo con sonido; «Restablecer vídeo completo» elimina los límites. El resumen muestra la duración conservada. La portada y el cierre siguen añadiéndose al tramo seleccionado.
 
 Los subtítulos se editan con los tiempos del original. Al exportar el MP4 o descargar el SRT, se excluyen los subtítulos fuera del recorte, se limitan los que cruzan sus bordes y se desplazan sus tiempos al nuevo inicio. La voz se recorta y sincroniza con el vídeo; la música mantiene su comportamiento actual. El recorte funciona en vertical y horizontal.
+
+## Subtítulos breves y campaña automática
+
+Los subtítulos se muestran en bloques de un máximo de cinco palabras, con tipografía más grande, hasta dos líneas y una caja centrada ajustada al texto. Se aplica a la transcripción, los SRT importados, las ediciones manuales, la vista previa y las exportaciones MP4/SRT. Cuando solo hay tiempos de una frase completa, sus bloques reparten esa duración según el número de palabras; se conserva todo el texto.
+
+El enlace fijo es https://www.goteo.org/project/abriguemos-el-refugio. El QR y el footer lo usan automáticamente. Ya no hay que introducirlo ni se reutilizan enlaces antiguos guardados en el navegador.
+
+Pruebas: `node --test export-plan.test.mjs music.test.mjs subtitles.test.mjs`. Exportación real desde los controles de la web verificada en vertical y horizontal con un SRT largo y sin introducir enlace de campaña.

@@ -1,9 +1,10 @@
+import {CAMPAIGN_URL} from './campaign.js';
 import {trimRange, trimCues} from './trim.js';
 import {videoLayout} from './layout.js';
 import './styles.css';
 import QRCode from 'qrcode';
 import {makeCanvas, drawScaled, paintCover, paintFrame, paintOutro, canvasPng} from './visuals.js';
-import {parseSrt, toSrt, needsReview} from './subtitles.js';
+import {parseSrt, toSrt, needsReview, shortCues} from './subtitles.js';
 import {automaticSubtitles} from './transcribe.js';
 import {exportReel} from './offline-export.js';
 
@@ -12,7 +13,7 @@ const state = {file:null, photo:null, logo:null, qrImage:null, cues:[], mode:'co
 const video = $('previewVideo');
 const frameVideo = $('frameVideo');
 let sourceUrl, resultUrl, qrVersion = 0;
-const settings = ['campaignUrl','outroSecs','renderQuality','language','musicVolume'];
+const settings = ['outroSecs','renderQuality','language','musicVolume'];
 try { const saved = JSON.parse(localStorage.getItem('sarnago-settings') || '{}'); settings.forEach(k => {if (saved[k] !== undefined) $(k).value = saved[k];}); } catch {}
 function status(message, pct) {
   $('progressBox').hidden = false;
@@ -31,9 +32,9 @@ async function task(fn) {
   try { await fn(); } catch (e) { status(e.message || 'No se pudo completar la operación.'); }
   finally {state.busy = false; controls();}
 }
-function props() {return {...state, name:$('personName').value, role:$('personRole').value, shortUrl:$('campaignUrl').value.trim().replace(/^https?:\/\//,''), video, time:Math.max(0,video.currentTime-state.trimStart)};}
+function props() {return {...state, name:$('personName').value, role:$('personRole').value, shortUrl:CAMPAIGN_URL.replace(/^https?:\/\//,''), video, time:Math.max(0,video.currentTime-state.trimStart)};}
 function preview() {
-  drawScaled($('previewCanvas'), state.mode === 'outro' ? paintOutro : state.mode === 'live' ? paintFrame : paintCover, {...props(),cues:trimCues(state.cues,state.trimStart,state.trimEnd??Infinity)});
+  drawScaled($('previewCanvas'), state.mode === 'outro' ? paintOutro : state.mode === 'live' ? paintFrame : paintCover, {...props(),cues:shortCues(trimCues(state.cues,state.trimStart,state.trimEnd??Infinity))});
 }
 function download(blob, filename) {
   const url = URL.createObjectURL(blob), a = document.createElement('a');
@@ -79,15 +80,15 @@ frameVideo.addEventListener('timeupdate',()=>{$('frameTime').value=frameVideo.cu
 $('coverInput').onchange = () => task(async () => {const f=$('coverInput').files[0]; if(f){state.photo=await fileImage(f); $('coverLabel').textContent=f.name; preview();}});
 $('logoInput').onchange = () => task(async () => {const f=$('logoInput').files[0]; if(f){state.logo=await fileImage(f); $('logoLabel').textContent=f.name; preview();}});
 async function updateQr() {
-  const version = ++qrVersion, value=$('campaignUrl').value.trim(); state.qrImage=null; preview();
+  const version = ++qrVersion, value=CAMPAIGN_URL; state.qrImage=null; preview();
   if (!value) return;
   try {const url=new URL(value); if (!['https:','http:'].includes(url.protocol)) throw Error();
     const img=await loadImage(await QRCode.toDataURL(url.href,{width:600,margin:4,errorCorrectionLevel:'M'}));
     if(version===qrVersion){state.qrImage=img;preview();}
-  } catch {status('Introduce un enlace completo válido para generar el QR.');}
+  } catch {status('No se pudo preparar el QR de la campaña. Vuelve a intentarlo.');}
 }
 function updateMusicLabel(){ $('musicVolumeValue').textContent = `${Number($('musicVolume').value).toLocaleString('es-ES',{maximumFractionDigits:1})}%`; }
-for(const id of settings) $(id).addEventListener('change',()=>{try{localStorage.setItem('sarnago-settings',JSON.stringify(Object.fromEntries(settings.map(k=>[k,$(k).value]))));}catch{} if(id==='campaignUrl') updateQr(); if(id==='musicVolume') updateMusicLabel();});
+for(const id of settings) $(id).addEventListener('change',()=>{try{localStorage.setItem('sarnago-settings',JSON.stringify(Object.fromEntries(settings.map(k=>[k,$(k).value]))));}catch{} if(id==='musicVolume') updateMusicLabel();});
 updateMusicLabel();
 function updateTrim() {
   frameVideo.pause();$('downloadVideo').hidden=true;
@@ -116,13 +117,13 @@ function renderCues() {
   state.cues.forEach((cue,i)=>{
     const row=document.createElement('div'); row.className='cue-row'; if(needsReview(cue)){row.classList.add('needs-review');row.title='Revisa esta frase: repetición o demasiado texto para su duración.';}
     for(const key of ['start','end']) {const input=document.createElement('input'); input.type='number';input.min='0';input.step='0.1';input.value=cue[key];input.setAttribute('aria-label',key==='start'?'Inicio en segundos':'Fin en segundos');input.onchange=()=>{cue[key]=Number(input.value);preview();};row.append(input);}
-    const text=document.createElement('textarea');text.value=cue.text;text.setAttribute('aria-label','Texto del subtítulo');text.oninput=()=>{cue.text=text.value;preview();};row.append(text);
+    const text=document.createElement('textarea');text.value=cue.text;text.setAttribute('aria-label','Texto del subtítulo');text.oninput=()=>{cue.text=text.value;preview();};text.onchange=()=>{state.cues=shortCues(state.cues);renderCues();preview();};row.append(text);
     const remove=document.createElement('button');remove.textContent='×';remove.setAttribute('aria-label','Eliminar subtítulo');remove.onclick=()=>{state.cues.splice(i,1);renderCues();preview();};row.append(remove);$('cues').append(row);
   });
 }
 $('addCue').onclick=()=>{const start=video.currentTime||0;state.cues.push({start,end:start+3,text:''});renderCues();};
-$('srtInput').onchange=()=>task(async()=>{const f=$('srtInput').files[0];if(!f)return;const cues=parseSrt(await f.text());if(!cues.length)throw new Error('El SRT no contiene subtítulos válidos.');state.cues=cues;renderCues();preview();status('Subtítulos importados.');});
-$('exportSrt').onclick=()=>download(new Blob([toSrt(trimCues(state.cues,state.trimStart,state.trimEnd??Infinity))],{type:'text/plain;charset=utf-8'}),'sarnago.srt');
+$('srtInput').onchange=()=>task(async()=>{const f=$('srtInput').files[0];if(!f)return;const cues=parseSrt(await f.text());if(!cues.length)throw new Error('El SRT no contiene subtítulos válidos.');state.cues=shortCues(cues);renderCues();preview();status('Subtítulos importados.');});
+$('exportSrt').onclick=()=>download(new Blob([toSrt(shortCues(trimCues(state.cues,state.trimStart,state.trimEnd??Infinity)))],{type:'text/plain;charset=utf-8'}),'sarnago.srt');
 $('autoBtn').onclick=()=>task(async()=>{
   video.pause();frameVideo.pause();
   const report=message=>{$('subtitleStatus').textContent=message;};
@@ -133,7 +134,7 @@ for(const [id,grid] of [['coverDownload',false],['gridDownload',true]]) $(id).on
 $('renderBtn').onclick=()=>task(async()=>{
   if(!updateTrim())throw new Error($('trimSummary').textContent);
   if(!$('personName').value.trim()) throw new Error('Escribe el nombre de la persona.');
-  await updateQr(); if(!state.qrImage) throw new Error('Introduce el enlace real del crowdfunding antes de exportar.');
+  await updateQr(); if(!state.qrImage) throw new Error('No se pudo generar el QR de la campaña. Vuelve a intentarlo.');
   const outro=Number($('outroSecs').value);
   if(!Number.isFinite(outro)||outro<2||outro>12)throw new Error('Revisa la duración del cierre (2–12 s).');
   if(state.cues.some(c=>!Number.isFinite(c.start)||!Number.isFinite(c.end)||c.start<0||c.end<=c.start||c.end>video.duration+.1))throw new Error('Revisa los tiempos de los subtítulos.');
@@ -142,4 +143,5 @@ $('renderBtn').onclick=()=>task(async()=>{
   const blob=result.blob;
   if(resultUrl)URL.revokeObjectURL(resultUrl);resultUrl=URL.createObjectURL(blob);$('downloadVideo').href=resultUrl;$('downloadVideo').download='26CrowdfundingVideo_'+($('personName').value.trim().replace(/[<>:"/\\|?*\x00-\x1f]/g,'').replace(/\s+/g,'_')||'NOMBRE')+'.mp4';$('downloadVideo').hidden=false;status(result.musicWarning ? `Vídeo terminado. Ya puedes descargarlo. ${result.musicWarning}` : 'Vídeo terminado. Ya puedes descargarlo.',100);
 });
+$('campaignLink').href=CAMPAIGN_URL;
 controls(); preview(); updateQr();document.fonts.ready.then(preview);

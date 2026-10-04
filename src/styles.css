@@ -9,3 +9,5 @@
 .preview-canvas-wrap.landscape{aspect-ratio:16/9;max-width:100%}
 
 #trimPanel{margin:16px 0;padding:16px;border:1px solid #c5bbaa}#trimPanel>b{font-size:13px}.trim-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+
+.campaign-link{font-size:12px;line-height:1.8;color:#50483f}.campaign-link a{color:#735024;text-underline-offset:3px}

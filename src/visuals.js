@@ -143,15 +143,7 @@ export function paintOverlay(ctx, props) {
   ctx.save();
   const cue = activeCue(props.cues, props.time || 0);
   if (cue) {
-    ctx.font = '600 ' + (cue.text.length > 160 ? 36 : cue.text.length > 100 ? 44 : 56) + 'px "DM Sans", Arial, sans-serif';
-    ctx.textAlign = 'center';
-    const words = wrapLines(ctx, cue.text, 900, 8);
-    const h = words.length * 72 + 38;
-    const y = 1660 - h;
-    ctx.fillStyle = COLORS.night;
-    ctx.fillRect(46, y, 988, h);
-    ctx.fillStyle = COLORS.ivory;
-    words.forEach((s, i) => ctx.fillText(s, 540, y + 69 + i * 72));
+    paintShortSubtitle(ctx,cue.text,540,1650,900,64);
   }
   ctx.fillStyle = COLORS.night; ctx.fillRect(0, 1775, 1080, 145);
   line(ctx, 1776, 0, 1080);
@@ -250,11 +242,7 @@ function paintLandscapeCover(ctx,props) {
 function paintLandscapeOverlay(ctx,props) {
   ctx.save();const cue=activeCue(props.cues,props.time||0);
   if(cue){
-    const size=cue.text.length>160?32:cue.text.length>100?38:44;
-    ctx.font=`600 ${size}px "DM Sans", Arial, sans-serif`;ctx.textAlign='center';
-    const lines=wrapLines(ctx,cue.text,1600,8),lh=size*1.25,h=lines.length*lh+32,y=910-h;
-    ctx.fillStyle=COLORS.night;ctx.fillRect(120,y,1680,h);ctx.fillStyle=COLORS.ivory;
-    lines.forEach((s,i)=>ctx.fillText(s,960,y+16+size+i*lh));
+    paintShortSubtitle(ctx,cue.text,960,900,1460,60);
   }
   ctx.fillStyle=COLORS.night;ctx.fillRect(0,950,1920,130);line(ctx,951,0,1920);
   landscapeText(ctx,'ABRIGAR EL REFUGIO',60,1004,700,31,undefined,1);
@@ -275,4 +263,21 @@ function paintLandscapeOutro(ctx,props) {
   landscapeText(ctx,'ESCANEA Y COLABORA',1280,810,550,27,undefined,1,COLORS.earth);
   line(ctx,930,70,1850);landscapeText(ctx,'SARNAGO',70,990,500,29);
   landscapeText(ctx,'TIERRA DE NADIE, TIERRA DE TODOS',70,1040,1600,23,undefined,1,COLORS.earth);ctx.restore();
+}
+
+function paintShortSubtitle(ctx,text,center,bottom,maxWidth,startSize) {
+  let size=startSize,lines;
+  do {
+    ctx.font='600 '+size+'px "DM Sans", Arial, sans-serif';
+    lines=wrapLines(ctx,text,maxWidth,20);
+    if(lines.length<=2&&lines.every(s=>ctx.measureText(s).width<=maxWidth))break;
+    size-=2;
+  } while(size>20);
+  const padding=24,lineHeight=size*1.25,height=lines.length*lineHeight+padding*2;
+  const width=Math.min(maxWidth,Math.max(...lines.map(s=>ctx.measureText(s).width)))+padding*2;
+  const top=bottom-height;
+  ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle=COLORS.night;
+  ctx.fillRect(center-width/2,top,width,height);ctx.fillStyle=COLORS.ivory;
+  lines.forEach((s,i)=>ctx.fillText(s,center,top+padding+lineHeight*(i+.5)));
+  ctx.textBaseline='alphabetic';
 }

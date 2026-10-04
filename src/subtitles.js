@@ -47,7 +47,7 @@ export function normalizeWhisper(chunks, duration) {
     else {group.text+=' '+word.text;group.end=Math.max(group.end,word.end);}
     if(/[.!?]$/.test(word.text))flush();
   }
-  flush();return result;
+  flush();return shortCues(result);
 }
 
 export function needsReview(cue) {
@@ -58,4 +58,22 @@ export function needsReview(cue) {
     if(seen.get(phrase)>=3)return true;
   }
   return cue.text.length / Math.max(.01,cue.end-cue.start)>30;
+}
+
+// Segment-only transcripts/SRTs have no word timestamps: distribute their duration
+// by word count, retaining the original boundaries and every word.
+export function shortCues(cues) {
+  return cues.flatMap(cue => {
+    const words=String(cue.text||'').trim().split(/\s+/).filter(Boolean);
+    if(!words.length)return [{...cue,text:''}];
+    if(words.length<=5)return [{...cue,text:words.join(' ')}];
+    const count=Math.ceil(words.length/5),size=Math.ceil(words.length/count),result=[];
+    for(let i=0;i<words.length;i+=size){
+      const end=Math.min(i+size,words.length);
+      result.push({...cue,text:words.slice(i,end).join(' '),
+        start:cue.start+(cue.end-cue.start)*i/words.length,
+        end:end===words.length?cue.end:cue.start+(cue.end-cue.start)*end/words.length});
+    }
+    return result;
+  });
 }

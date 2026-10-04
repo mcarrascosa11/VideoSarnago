@@ -1,3 +1,4 @@
+import {shortCues} from './subtitles.js';
 import {trimRange, trimCues} from './trim.js';
 import {videoLayout} from './layout.js';
 import {makeCanvas, drawScaled, paintCover, paintOutro, paintOverlay, canvasPng} from './visuals.js';
@@ -9,7 +10,7 @@ export async function exportReel(props) {
   const duration = video.duration;
   if (!file || !Number.isFinite(duration) || duration <= 0) throw new Error('El vídeo no tiene una duración válida.');
   const range=trimRange(duration,props.trimStart ?? 0,props.trimEnd ?? duration);
-  props={...props,cues:trimCues(props.cues||[],range.start,range.end)};
+  props={...props,cues:shortCues(trimCues(props.cues||[],range.start,range.end))};
   const bodyDuration = Math.ceil(range.duration * FPS - 1e-8) / FPS;
   const endDuration = Math.ceil(outro * FPS) / FPS;
   const total = INTRO + bodyDuration + endDuration;
