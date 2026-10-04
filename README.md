@@ -28,3 +28,9 @@ Proyecto Vite, JavaScript nativo, canvas + MediaRecorder, qrcode, Transformers.j
 La orientación se detecta a partir de las dimensiones decodificadas por el navegador. Los vídeos verticales mantienen su diseño y exportación actuales (720 × 1280 o 1080 × 1920). Los horizontales se exportan a 1280 × 720 o 1920 × 1080, con portada y cierre en dos columnas, subtítulos y footer adaptados. El encuadre horizontal completo se ajusta proporcionalmente al espacio disponible, con márgenes del color de marca cuando hacen falta. La portada para cuadrícula sigue siendo 4:5.
 
 Validación: `node --test export-plan.test.mjs music.test.mjs` y `npm run build`. Se han comprobado exportaciones MP4 reales en navegador con vídeo H.264 y audio AAC, en ambas orientaciones y calidades, incluyendo portada, subtítulos, footer y cierre.
+
+## Recortar el principio y el final
+
+Tras cargar un vídeo, revisa el selector de fotogramas y usa «Empezar aquí» y «Terminar aquí», o escribe los tiempos en segundos. «Reproducir recorte» reproduce el tramo con sonido; «Restablecer vídeo completo» elimina los límites. El resumen muestra la duración conservada. La portada y el cierre siguen añadiéndose al tramo seleccionado.
+
+Los subtítulos se editan con los tiempos del original. Al exportar el MP4 o descargar el SRT, se excluyen los subtítulos fuera del recorte, se limitan los que cruzan sus bordes y se desplazan sus tiempos al nuevo inicio. La voz se recorta y sincroniza con el vídeo; la música mantiene su comportamiento actual. El recorte funciona en vertical y horizontal.

@@ -1,3 +1,4 @@
+import {trimRange, trimCues} from './trim.js';
 import {videoLayout} from './layout.js';
 import {makeCanvas, drawScaled, paintCover, paintOutro, paintOverlay, canvasPng} from './visuals.js';
 import {getFfmpeg} from './transcribe.js';
@@ -7,7 +8,9 @@ export async function exportReel(props) {
   const {file, video, quality, outro, progress} = props;
   const duration = video.duration;
   if (!file || !Number.isFinite(duration) || duration <= 0) throw new Error('El vídeo no tiene una duración válida.');
-  const bodyDuration = Math.ceil(duration * FPS) / FPS;
+  const range=trimRange(duration,props.trimStart ?? 0,props.trimEnd ?? duration);
+  props={...props,cues:trimCues(props.cues||[],range.start,range.end)};
+  const bodyDuration = Math.ceil(range.duration * FPS - 1e-8) / FPS;
   const endDuration = Math.ceil(outro * FPS) / FPS;
   const total = INTRO + bodyDuration + endDuration;
   const ffmpeg = await getFfmpeg(progress);
@@ -57,7 +60,7 @@ export async function exportReel(props) {
     const overlay=await write('overlays.ffconcat',new TextEncoder().encode(list));
     const body=name('body.mp4');files.push(body);
     probing=true;
-    await run(bodyArgs(input,overlay,body,quality,bodyDuration,orientation),'Procesando fotogramas del original…',8,70,bodyDuration);
+    await run(bodyArgs(input,overlay,body,quality,bodyDuration,orientation,range.start),'Procesando fotogramas del original…',8,70,bodyDuration);
     probing=false;
     const intro=name('intro.mp4'), ending=name('ending.mp4');files.push(intro,ending);
     await run(cardArgs(cover,intro,INTRO),'Integrando portada…',78,2,INTRO);
@@ -73,7 +76,7 @@ export async function exportReel(props) {
         music=await write('music.mp3',new Uint8Array(await response.arrayBuffer()));
       } catch {warning='No se pudo cargar la música; se conserva la voz original.';}
     }
-    const mix=()=>run(muxArgs({list:concat,input,music,volume,hasAudio,total,output}),'Preparando audio y MP4 final…',88,11,total);
+    const mix=()=>run(muxArgs({list:concat,input,music,volume,hasAudio,total,output,trimStart:range.start,trimDuration:range.duration}),'Preparando audio y MP4 final…',88,11,total);
     try {await mix();} catch(e) {
       if(!music || !ffmpeg.loaded)throw e;
       music=null;warning='La música falló; se conserva la voz original.';await mix();

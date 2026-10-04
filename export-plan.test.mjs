@@ -25,3 +25,20 @@ test('horizontal preserves the full input while portrait keeps existing crop',()
  assert.doesNotMatch(horizontal,/crop=/);assert.match(horizontal,/pad=1920:1080/);
  assert.match(bodyArgs('source','overlay','body',720,10).join(' '),/scale=720:1184:force_original_aspect_ratio=increase,crop=720:1184/);
 });
+import {trimRange,trimCues} from './src/trim.js';
+test('trim rejects invalid ranges and defaults to complete video',()=>{
+ assert.deepEqual(trimRange(10),{start:0,end:10,duration:10});
+ for(const [start,end] of [[5,5],[6,2],[-1,5],[0,11],[NaN,5]])assert.throws(()=>trimRange(10,start,end));
+});
+test('trim clips boundary subtitles, removes excluded cues and preserves original timestamps',()=>{
+ const cues=[{start:0,end:1,text:'excluded'},{start:1,end:4,text:'start'},{start:4,end:8,text:'end'},{start:8,end:9,text:'excluded'}];
+ const original=structuredClone(cues);
+ assert.deepEqual(trimCues(cues,2,6),[{start:0,end:2,text:'start'},{start:2,end:4,text:'end'}]);
+ assert.deepEqual(cues,original);
+});
+test('trim seeks original video and cuts voice before adding intro delay',()=>{
+ const body=bodyArgs('original','overlays','body',720,4,'landscape',2);
+ assert.ok(body.indexOf('-ss')<body.indexOf('-i'));assert.equal(body[body.indexOf('-ss')+1],'2');
+ const mux=muxArgs({list:'list',input:'original',hasAudio:true,total:6.6,output:'out',trimStart:2,trimDuration:4});
+ assert.match(mux.join(' '),/atrim=start=2:duration=4,asetpts=PTS-STARTPTS,aresample=48000,adelay=600/);
+});

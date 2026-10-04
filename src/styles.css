@@ -7,3 +7,5 @@
 .cue-row.needs-review{border-left:4px solid #bb7628;background:#fff2db}
 
 .preview-canvas-wrap.landscape{aspect-ratio:16/9;max-width:100%}
+
+#trimPanel{margin:16px 0;padding:16px;border:1px solid #c5bbaa}#trimPanel>b{font-size:13px}.trim-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}

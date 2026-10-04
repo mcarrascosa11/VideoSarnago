@@ -1,3 +1,4 @@
+import {trimRange, trimCues} from './trim.js';
 import {videoLayout} from './layout.js';
 import './styles.css';
 import QRCode from 'qrcode';
@@ -7,7 +8,7 @@ import {automaticSubtitles} from './transcribe.js';
 import {exportReel} from './offline-export.js';
 
 const $ = id => document.getElementById(id);
-const state = {file:null, photo:null, logo:null, qrImage:null, cues:[], mode:'cover', busy:false, orientation:'portrait'};
+const state = {file:null, photo:null, logo:null, qrImage:null, cues:[], mode:'cover', busy:false, orientation:'portrait', trimStart:0, trimEnd:null};
 const video = $('previewVideo');
 const frameVideo = $('frameVideo');
 let sourceUrl, resultUrl, qrVersion = 0;
@@ -30,9 +31,9 @@ async function task(fn) {
   try { await fn(); } catch (e) { status(e.message || 'No se pudo completar la operación.'); }
   finally {state.busy = false; controls();}
 }
-function props() {return {...state, name:$('personName').value, role:$('personRole').value, shortUrl:$('campaignUrl').value.trim().replace(/^https?:\/\//,''), video, time:video.currentTime};}
+function props() {return {...state, name:$('personName').value, role:$('personRole').value, shortUrl:$('campaignUrl').value.trim().replace(/^https?:\/\//,''), video, time:Math.max(0,video.currentTime-state.trimStart)};}
 function preview() {
-  drawScaled($('previewCanvas'), state.mode === 'outro' ? paintOutro : state.mode === 'live' ? paintFrame : paintCover, props());
+  drawScaled($('previewCanvas'), state.mode === 'outro' ? paintOutro : state.mode === 'live' ? paintFrame : paintCover, {...props(),cues:trimCues(state.cues,state.trimStart,state.trimEnd??Infinity)});
 }
 function download(blob, filename) {
   const url = URL.createObjectURL(blob), a = document.createElement('a');
@@ -53,6 +54,10 @@ $('videoInput').onchange = () => task(async () => {
   await new Promise((resolve,reject) => {video.onloadeddata = resolve; video.onerror = () => reject(new Error('No se puede leer este vídeo. Utiliza MP4 H.264.')); video.src = sourceUrl; video.load();});
   if (!Number.isFinite(video.duration) || video.duration <= 0) throw new Error('La duración del vídeo no es válida.');
   frameVideo.src=sourceUrl; frameVideo.load(); $('framePicker').hidden=false; $('frameTime').max=Math.max(0,video.duration-.05); $('frameTime').value=0;
+  state.trimStart=0;state.trimEnd=video.duration;
+  $('trimStart').value='0';$('trimEnd').value=String(video.duration);
+  for(const id of ['trimStart','trimEnd']) $(id).max=video.duration;
+  $('trimPanel').hidden=false;updateTrim();
   state.orientation = videoLayout(video).orientation;
   const horizontal = state.orientation === 'landscape';
   const canvas = $('previewCanvas'); canvas.width = horizontal ? 960 : 540; canvas.height = horizontal ? 540 : 960;
@@ -84,6 +89,25 @@ async function updateQr() {
 function updateMusicLabel(){ $('musicVolumeValue').textContent = `${Number($('musicVolume').value).toLocaleString('es-ES',{maximumFractionDigits:1})}%`; }
 for(const id of settings) $(id).addEventListener('change',()=>{try{localStorage.setItem('sarnago-settings',JSON.stringify(Object.fromEntries(settings.map(k=>[k,$(k).value]))));}catch{} if(id==='campaignUrl') updateQr(); if(id==='musicVolume') updateMusicLabel();});
 updateMusicLabel();
+function updateTrim() {
+  frameVideo.pause();$('downloadVideo').hidden=true;
+  try {
+    const range=trimRange(video.duration,$('trimStart').value===''?NaN:Number($('trimStart').value),$('trimEnd').value===''?NaN:Number($('trimEnd').value));
+    state.trimStart=range.start;state.trimEnd=range.end;
+    $('trimSummary').textContent='Se conservarán '+range.duration.toFixed(2)+' s de '+video.duration.toFixed(2)+' s. La portada y el cierre se añaden después.';
+    preview();return range;
+  } catch(e){$('trimSummary').textContent=e.message;return null;}
+}
+for(const id of ['trimStart','trimEnd']) $(id).addEventListener('input',updateTrim);
+$('markStart').onclick=()=>{$('trimStart').value=frameVideo.currentTime.toFixed(2);updateTrim();};
+$('markEnd').onclick=()=>{$('trimEnd').value=frameVideo.currentTime.toFixed(2);updateTrim();};
+$('resetTrim').onclick=()=>{$('trimStart').value='0';$('trimEnd').value=String(video.duration);updateTrim();};
+let playingTrim=false;
+$('previewTrim').onclick=()=>task(async()=>{const range=updateTrim();if(!range)throw new Error($('trimSummary').textContent);frameVideo.currentTime=range.start;frameVideo.muted=false;playingTrim=true;await frameVideo.play();});
+frameVideo.addEventListener('pause',()=>{playingTrim=false;frameVideo.muted=true;});
+frameVideo.addEventListener('timeupdate',()=>{if(playingTrim&&frameVideo.currentTime>=state.trimEnd)frameVideo.pause();});
+video.addEventListener('play',()=>{if(video.currentTime<state.trimStart||video.currentTime>=state.trimEnd)video.currentTime=state.trimStart;});
+video.addEventListener('timeupdate',()=>{if(!video.paused&&video.currentTime>=state.trimEnd)video.pause();});
 for(const id of ['personName','personRole']) $(id).addEventListener('input',preview);
 for(const [id,mode] of [['showCover','cover'],['showOutro','outro'],['showLive','live']]) $(id).onclick=()=>{state.mode=mode; document.querySelectorAll('.preview-switch button').forEach(b=>b.classList.toggle('selected',b.id===id)); video.classList.toggle('hidden',mode!=='live'); if(mode!=='live')video.pause(); preview();};
 video.addEventListener('timeupdate',preview); video.addEventListener('seeked',preview);
@@ -98,7 +122,7 @@ function renderCues() {
 }
 $('addCue').onclick=()=>{const start=video.currentTime||0;state.cues.push({start,end:start+3,text:''});renderCues();};
 $('srtInput').onchange=()=>task(async()=>{const f=$('srtInput').files[0];if(!f)return;const cues=parseSrt(await f.text());if(!cues.length)throw new Error('El SRT no contiene subtítulos válidos.');state.cues=cues;renderCues();preview();status('Subtítulos importados.');});
-$('exportSrt').onclick=()=>download(new Blob([toSrt(state.cues)],{type:'text/plain;charset=utf-8'}),'sarnago.srt');
+$('exportSrt').onclick=()=>download(new Blob([toSrt(trimCues(state.cues,state.trimStart,state.trimEnd??Infinity))],{type:'text/plain;charset=utf-8'}),'sarnago.srt');
 $('autoBtn').onclick=()=>task(async()=>{
   video.pause();frameVideo.pause();
   const report=message=>{$('subtitleStatus').textContent=message;};
@@ -107,6 +131,7 @@ $('autoBtn').onclick=()=>task(async()=>{
 });
 for(const [id,grid] of [['coverDownload',false],['gridDownload',true]]) $(id).onclick=()=>task(async()=>{await document.fonts.ready;const horizontal=!grid&&state.orientation==='landscape';const c=makeCanvas(horizontal?1920:1080,grid?1350:horizontal?1080:1920);drawScaled(c,paintCover,props(),grid);download(await canvasPng(c),grid?'sarnago-portada-4x5.png':'sarnago-portada.png');});
 $('renderBtn').onclick=()=>task(async()=>{
+  if(!updateTrim())throw new Error($('trimSummary').textContent);
   if(!$('personName').value.trim()) throw new Error('Escribe el nombre de la persona.');
   await updateQr(); if(!state.qrImage) throw new Error('Introduce el enlace real del crowdfunding antes de exportar.');
   const outro=Number($('outroSecs').value);
