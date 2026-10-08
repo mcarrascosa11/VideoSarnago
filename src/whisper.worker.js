@@ -2,6 +2,8 @@ import {pipeline, env} from '@huggingface/transformers';
 env.allowLocalModels = false;
 // A single WASM thread also works without cross-origin isolation.
 env.backends.onnx.wasm.numThreads = 1;
+// ONNX Runtime wasm from the CDN; vite.config.js leaves the local copy out of the build
+env.backends.onnx.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1/dist/';
 let model;
 self.onmessage = async ({data}) => {
   const report = text => self.postMessage({type:'status',text});

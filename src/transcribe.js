@@ -12,7 +12,8 @@ export async function getFfmpeg(status = () => {}) {
     import('@ffmpeg/util')
   ]);
   const ffmpeg = new FFmpeg();
-  const base = new URL('/ffmpeg/', location.origin).href.replace(/\/$/,'');
+  // ESM core from the CDN: copying the 32 MB wasm into every Vercel deployment filled the storage quota
+  const base = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/esm';
   let timer;
   try {
     await Promise.race([
