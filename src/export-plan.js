@@ -1,5 +1,4 @@
 export const FPS = 25;
-export const INTRO = 0.6;
 // threads > 1 only with the multithreaded FFmpeg core (see ffmpeg.js).
 // Every input and filter graph sets its thread count explicitly: FFmpeg's automatic count follows the CPU cores
 // and, on machines with many cores, exhausts the 32-thread pool of the wasm core and deadlocks.
@@ -29,7 +28,7 @@ export function muxArgs({list,input,music,volume,hasAudio,total,output,trimStart
   if(hasAudio) args.push('-threads','1','-i',input);
   else args.push('-f','lavfi','-i','anullsrc=r=48000:cl=stereo');
   const trim = hasAudio && trimDuration !== undefined ? `atrim=start=${trimStart}:duration=${trimDuration},` : '';
-  let filter=`[1:a:0]${trim}asetpts=PTS-STARTPTS,aresample=48000,adelay=600:all=1,apad,atrim=duration=${total}[voice]`;
+  let filter=`[1:a:0]${trim}asetpts=PTS-STARTPTS,aresample=48000,apad,atrim=duration=${total}[voice]`;
   if(music) {
     args.push('-threads','1','-stream_loop','-1','-i',music);
     filter+=`;[2:a:0]volume=${volume/100},aresample=48000[bg];[voice][bg]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.95:level=0[a]`;

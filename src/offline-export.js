@@ -1,9 +1,9 @@
 import {shortCues} from './subtitles.js';
 import {trimRange, trimCues} from './trim.js';
 import {videoLayout} from './layout.js';
-import {makeCanvas, drawScaled, paintCover, paintOutro, paintOverlay, canvasPng} from './visuals.js';
+import {makeCanvas, drawScaled, paintOutro, paintOverlay, canvasPng} from './visuals.js';
 import {getFfmpeg, ffmpegThreads, mountFile, execWatched, disableMultithread} from './ffmpeg.js';
-import {INTRO, FPS, overlayTimeline, bodyArgs, cardArgs, muxArgs} from './export-plan.js';
+import {FPS, overlayTimeline, bodyArgs, cardArgs, muxArgs} from './export-plan.js';
 
 export async function exportReel(props) {
   try {return await renderReel(props);}
@@ -25,7 +25,8 @@ async function renderReel(props) {
   props={...props,cues:shortCues(trimCues(props.cues||[],range.start,range.end))};
   const bodyDuration = Math.ceil(range.duration * FPS - 1e-8) / FPS;
   const endDuration = Math.ceil(outro * FPS) / FPS;
-  const total = INTRO + bodyDuration + endDuration;
+  // The Reel starts directly with the video; the cover is only downloaded as a separate PNG.
+  const total = bodyDuration + endDuration;
   const ffmpeg = await getFfmpeg(progress);
   const threads = ffmpegThreads(ffmpeg);
   const prefix = 'reel_' + Date.now() + '_';
@@ -56,7 +57,6 @@ async function renderReel(props) {
     progress('Leyendo el vídeo original…',1);
     source=await mountFile(ffmpeg,file);
     const input=source.path;
-    const cover=await png('cover.png',paintCover,props);
     const end=await png('end.png',paintOutro,props);
     const segments=overlayTimeline(props.cues||[],bodyDuration);
     let list='ffconcat version 1.0\n', last;
@@ -72,10 +72,9 @@ async function renderReel(props) {
     probing=true;
     await run(bodyArgs(input,overlay,body,quality,bodyDuration,orientation,range.start,threads),'Procesando fotogramas del original…',8,70,bodyDuration);
     probing=false;
-    const intro=name('intro.mp4'), ending=name('ending.mp4');files.push(intro,ending);
-    await run(cardArgs(cover,intro,INTRO,threads),'Integrando portada…',78,2,INTRO);
-    await run(cardArgs(end,ending,endDuration,threads),'Integrando cierre y QR…',80,8,endDuration);
-    const concat=await write('clips.ffconcat',new TextEncoder().encode(`ffconcat version 1.0\nfile '${intro}'\nfile '${body}'\nfile '${ending}'\n`));
+    const ending=name('ending.mp4');files.push(ending);
+    await run(cardArgs(end,ending,endDuration,threads),'Integrando cierre y QR…',78,10,endDuration);
+    const concat=await write('clips.ffconcat',new TextEncoder().encode(`ffconcat version 1.0\nfile '${body}'\nfile '${ending}'\n`));
     const output=name('final.mp4');files.push(output);
     const volume=Math.max(0,Math.min(20,Number(props.musicVolume)||0));
     let music;

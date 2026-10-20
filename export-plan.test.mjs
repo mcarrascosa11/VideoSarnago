@@ -11,7 +11,7 @@ test('render uses original decoded frames and copy-only final video mux',()=>{
  assert.ok(bodyArgs('original','overlay','body',720,10).join(' ').includes('fps=25'));
  const args=muxArgs({list:'list',input:'original',music:null,volume:0,hasAudio:true,total:15,output:'out'});
  assert.equal(args[args.indexOf('-c:v')+1],'copy');
- assert.match(args.join(' '),/adelay=600/);
+ assert.doesNotMatch(args.join(' '),/adelay/);
 });
 import {videoLayout} from './src/layout.js';
 test('orientation follows decoded dimensions and selects matching output sizes',()=>{
@@ -36,11 +36,11 @@ test('trim clips boundary subtitles, removes excluded cues and preserves origina
  assert.deepEqual(trimCues(cues,2,6),[{start:0,end:2,text:'start'},{start:2,end:4,text:'end'}]);
  assert.deepEqual(cues,original);
 });
-test('trim seeks original video and cuts voice before adding intro delay',()=>{
+test('trim seeks original video and cuts voice from the start of the Reel',()=>{
  const body=bodyArgs('original','overlays','body',720,4,'landscape',2);
  assert.ok(body.indexOf('-ss')<body.indexOf('-i'));assert.equal(body[body.indexOf('-ss')+1],'2');
  const mux=muxArgs({list:'list',input:'original',hasAudio:true,total:6.6,output:'out',trimStart:2,trimDuration:4});
- assert.match(mux.join(' '),/atrim=start=2:duration=4,asetpts=PTS-STARTPTS,aresample=48000,adelay=600/);
+ assert.match(mux.join(' '),/atrim=start=2:duration=4,asetpts=PTS-STARTPTS,aresample=48000,apad/);
 });
 test('single-thread by default; thread count reaches decoder, filters and encoder when multithreaded',()=>{
  const one=bodyArgs('src','ov','body',720,10);
