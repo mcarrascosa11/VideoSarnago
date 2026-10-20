@@ -42,3 +42,9 @@ test('trim seeks original video and cuts voice before adding intro delay',()=>{
  const mux=muxArgs({list:'list',input:'original',hasAudio:true,total:6.6,output:'out',trimStart:2,trimDuration:4});
  assert.match(mux.join(' '),/atrim=start=2:duration=4,asetpts=PTS-STARTPTS,aresample=48000,adelay=600/);
 });
+test('single-thread by default; thread count reaches decoder, filters and encoder when multithreaded',()=>{
+ const one=bodyArgs('src','ov','body',720,10);
+ assert.equal(one[one.lastIndexOf('-threads')+1],'1');
+ const four=bodyArgs('src','ov','body',720,10,'portrait',0,4).join(' ');
+ assert.match(four,/-filter_complex_threads 4 -threads 4 -i src/);assert.match(four,/libx264.*-threads 4/);
+});

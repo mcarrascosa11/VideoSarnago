@@ -4,3 +4,10 @@ node_modules
 .DS_Store
 *.log
 
+
+# Vídeos de las personas: nunca al repo (es público)
+videos-originales/
+*.mp4
+*.mov
+*.MOV
+*.webm

@@ -9,4 +9,13 @@ const dropOrtWasm = () => ({
   }
 });
 
-export default defineConfig({plugins:[dropOrtWasm()],worker:{format:'es',plugins:()=>[dropOrtWasm()]},optimizeDeps:{exclude:['@ffmpeg/ffmpeg','@ffmpeg/util']}});
+// Same cross-origin isolation as vercel.json, so FFmpeg and Whisper can use several threads locally too
+const headers = {'Cross-Origin-Opener-Policy': 'same-origin', 'Cross-Origin-Embedder-Policy': 'credentialless'};
+
+export default defineConfig({
+  plugins: [dropOrtWasm()],
+  worker: {format: 'es', plugins: () => [dropOrtWasm()]},
+  optimizeDeps: {exclude: ['@ffmpeg/ffmpeg', '@ffmpeg/util']},
+  server: {headers},
+  preview: {headers},
+});
