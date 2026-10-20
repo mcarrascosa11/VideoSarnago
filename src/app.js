@@ -7,6 +7,7 @@ import {makeCanvas, drawScaled, paintCover, paintFrame, paintOutro, canvasPng} f
 import {parseSrt, toSrt, needsReview, shortCues} from './subtitles.js';
 import {automaticSubtitles} from './transcribe.js';
 import {exportReel} from './offline-export.js';
+import {preloadFfmpeg} from './ffmpeg.js';
 
 const $ = id => document.getElementById(id);
 const state = {file:null, photo:null, logo:null, qrImage:null, cues:[], mode:'cover', busy:false, orientation:'portrait', trimStart:0, trimEnd:null};
@@ -69,6 +70,7 @@ $('videoInput').onchange = () => task(async () => {
   $('renderQuality').options[1].textContent = horizontal ? '1920 × 1080 · alta calidad' : '1080 × 1920 · alta calidad';
   $('coverDownload').textContent = 'Descargar portada ' + (horizontal ? 'horizontal' : 'vertical') + ' · PNG';
   state.file = file; $('videoLabel').textContent = file.name; await capture(); status('Vídeo preparado.');
+  preloadFfmpeg();
 });
 $('captureBtn').onclick = () => task(async () => {
   frameVideo.pause();
