@@ -19,6 +19,7 @@ El enlace de la campaña es fijo (https://www.goteo.org/project/abriguemos-el-re
 - La web se sirve con aislamiento de origen (cabeceras COOP/COEP en `vercel.json` y `vite.config.js`). Así FFmpeg usa su versión multihilo (hasta 4 hilos) y Whisper también usa varios hilos. Si el navegador no lo permite (p. ej. Safari), todo funciona igual con un solo hilo.
 - Whisper usa la tarjeta gráfica (WebGPU) cuando está disponible; si falla, pasa al procesador automáticamente y, como último recurso, al modo de un solo hilo.
 - FFmpeg se precarga en cuanto eliges el vídeo y lee el archivo original sin copiarlo entero a memoria (WORKERFS).
+- Cada entrada y filtro de FFmpeg fija su número de hilos: el valor automático depende de los núcleos y, en ordenadores con muchos, agota los 32 hilos del motor wasm y lo bloquea. Si aun así se bloquea (60 s sin actividad), se repite automáticamente con un solo hilo.
 - FFmpeg (~31 MB) y ONNX Runtime (~21 MB) se cargan desde jsDelivr para no llenar la cuota de Vercel. El modelo de Whisper se descarga de Hugging Face la primera vez y queda en la caché del navegador (con tarjeta gráfica la descarga es mayor, ~590 MB; con procesador, ~250 MB).
 
 Se recomienda Chrome actualizado en ordenador y vídeos de 30–90 s.
@@ -41,7 +42,7 @@ Bloques de hasta cinco palabras, hasta dos líneas, en caja centrada. Si solo ha
 npm install
 npm run dev      # con las mismas cabeceras COOP/COEP que producción
 npm run build
-node --test export-plan.test.mjs subtitles.test.mjs
+node --test export-plan.test.mjs subtitles.test.mjs ffmpeg.test.mjs
 ```
 
 Vite, JavaScript nativo, canvas, qrcode, Transformers.js y FFmpeg.wasm. Despliegue estático en Vercel.

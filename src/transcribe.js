@@ -1,5 +1,5 @@
 import {normalizeWhisper} from './subtitles.js';
-import {getFfmpeg, mountFile} from './ffmpeg.js';
+import {getFfmpeg, mountFile, execWatched, disableMultithread} from './ffmpeg.js';
 
 let whisperWorker = null;
 
@@ -22,32 +22,41 @@ function runWhisper(wave, language, mode, status) {
   });
 }
 
-export async function automaticSubtitles(file, language, length, status = () => {}) {
-  if (!file) throw new Error('Primero debes subir el vídeo.');
+async function extractAudio(file, status) {
   const ffmpeg = await getFfmpeg(status);
   const output = 'voice_output_' + Date.now() + '.f32';
   let source;
   try {
     status('Extrayendo el audio original…');
     source = await mountFile(ffmpeg, file);
-    const exit = await ffmpeg.exec(['-i', source.path, '-vn', '-ac', '1', '-ar', '16000', '-f', 'f32le', output]);
+    const exit = await execWatched(ffmpeg, ['-threads', '1', '-i', source.path, '-vn', '-filter_threads', '1', '-ac', '1', '-ar', '16000', '-f', 'f32le', output], {stallMs: 30000, maxMs: 300000});
     if (exit !== 0) throw new Error('No se pudo extraer el audio. Prueba a exportar el vídeo en MP4 H.264.');
     const data = await ffmpeg.readFile(output);
     if (!data || !data.length) throw new Error('El vídeo no contiene una pista de audio legible.');
-    const wave = new Float32Array(data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength));
-    let chunks;
-    try {chunks = await runWhisper(wave, language, 'fast', status);}
-    catch (e) {
-      console.warn('VideoSarnago: transcripción rápida no disponible, se repite en modo seguro.', e);
-      status('Reintentando la transcripción en modo compatible…');
-      chunks = await runWhisper(wave, language, 'safe', status);
-    }
-    if (!chunks?.length) throw new Error('Whisper no ha detectado frases. Puedes importar un SRT.');
-    const cues = normalizeWhisper(chunks, length);
-    if (!cues.length) throw new Error('La transcripción no contiene frases con tiempos válidos.');
-    return cues;
+    return new Float32Array(data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength));
   } finally {
-    await source?.release();
-    try {await ffmpeg.deleteFile(output);} catch {}
+    if (ffmpeg.loaded) {await source?.release(); try {await ffmpeg.deleteFile(output);} catch {}}
   }
+}
+
+export async function automaticSubtitles(file, language, length, status = () => {}) {
+  if (!file) throw new Error('Primero debes subir el vídeo.');
+  let wave;
+  try {wave = await extractAudio(file, status);}
+  catch (e) {
+    if (!e?.stalled || !e.multithreaded) throw e;
+    disableMultithread();
+    wave = await extractAudio(file, status);
+  }
+  let chunks;
+  try {chunks = await runWhisper(wave, language, 'fast', status);}
+  catch (e) {
+    console.warn('VideoSarnago: transcripción rápida no disponible, se repite en modo seguro.', e);
+    status('Reintentando la transcripción en modo compatible…');
+    chunks = await runWhisper(wave, language, 'safe', status);
+  }
+  if (!chunks?.length) throw new Error('Whisper no ha detectado frases. Puedes importar un SRT.');
+  const cues = normalizeWhisper(chunks, length);
+  if (!cues.length) throw new Error('La transcripción no contiene frases con tiempos válidos.');
+  return cues;
 }

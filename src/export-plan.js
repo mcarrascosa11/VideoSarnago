@@ -1,6 +1,8 @@
 export const FPS = 25;
 export const INTRO = 0.6;
-// threads > 1 only with the multithreaded FFmpeg core (see ffmpeg.js)
+// threads > 1 only with the multithreaded FFmpeg core (see ffmpeg.js).
+// Every input and filter graph sets its thread count explicitly: FFmpeg's automatic count follows the CPU cores
+// and, on machines with many cores, exhausts the 32-thread pool of the wasm core and deadlocks.
 export const encodeVideo = (threads = 1) => ['-c:v','libx264','-preset','ultrafast','-crf','23','-pix_fmt','yuv420p','-r','25','-video_track_timescale','12800','-threads',String(threads),'-an'];
 export function overlayTimeline(cues, duration) {
   const frames = Math.ceil(duration * FPS);
@@ -15,23 +17,23 @@ export function bodyArgs(input, overlay, output, quality, duration, orientation 
   const w = horizontal ? short * 16 / 9 : short, h = horizontal ? short : short * 16 / 9;
   const pictureH = horizontal ? Math.round(950 * h / 1080 / 2) * 2 : Math.round(1775 * w / 1080 / 2) * 2;
   const fit = horizontal ? `scale=${w}:${pictureH}:force_original_aspect_ratio=decrease,pad=${w}:${pictureH}:(ow-iw)/2:(oh-ih)/2:color=0x101820` : `scale=${w}:${pictureH}:force_original_aspect_ratio=increase,crop=${w}:${pictureH}`;
-  return ['-filter_complex_threads',String(threads),'-threads',String(threads),...(trimStart > 0 ? ['-ss',String(trimStart)] : []),'-i',input,'-f','concat','-safe','0','-i',overlay,
+  return ['-filter_complex_threads',String(threads),'-threads',String(threads),...(trimStart > 0 ? ['-ss',String(trimStart)] : []),'-i',input,'-threads','1','-f','concat','-safe','0','-i',overlay,
     '-filter_complex',`[0:v:0]setpts=PTS-STARTPTS,fps=25,${fit},setsar=1,pad=${w}:${h}:0:0:color=0x101820[v];[v][1:v]overlay=0:0:eof_action=repeat:format=auto,format=yuv420p[out]`,
     '-map','[out]','-t',String(duration),...encodeVideo(threads),output];
 }
 export function cardArgs(image, output, duration, threads = 1) {
-  return ['-filter_threads','1','-loop','1','-framerate','25','-i',image,'-vf','setsar=1','-t',String(duration),...encodeVideo(threads),output];
+  return ['-filter_threads','1','-threads','1','-loop','1','-framerate','25','-i',image,'-vf','setsar=1','-t',String(duration),...encodeVideo(threads),output];
 }
 export function muxArgs({list,input,music,volume,hasAudio,total,output,trimStart = 0,trimDuration}) {
-  const args=['-f','concat','-safe','0','-i',list];
-  if(hasAudio) args.push('-i',input);
+  const args=['-threads','1','-f','concat','-safe','0','-i',list];
+  if(hasAudio) args.push('-threads','1','-i',input);
   else args.push('-f','lavfi','-i','anullsrc=r=48000:cl=stereo');
   const trim = hasAudio && trimDuration !== undefined ? `atrim=start=${trimStart}:duration=${trimDuration},` : '';
   let filter=`[1:a:0]${trim}asetpts=PTS-STARTPTS,aresample=48000,adelay=600:all=1,apad,atrim=duration=${total}[voice]`;
   if(music) {
-    args.push('-stream_loop','-1','-i',music);
+    args.push('-threads','1','-stream_loop','-1','-i',music);
     filter+=`;[2:a:0]volume=${volume/100},aresample=48000[bg];[voice][bg]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.95:level=0[a]`;
   } else filter+=';[voice]anull[a]';
   return [...args,'-filter_complex_threads','1','-filter_complex',filter,'-map','0:v:0','-map','[a]',
-    '-c:v','copy','-c:a','aac','-b:a','128k','-ac','2','-t',String(total),'-map_metadata','-1','-metadata:s:v:0','rotate=0','-movflags','+faststart',output];
+    '-c:v','copy','-c:a','aac','-b:a','128k','-threads','1','-ac','2','-t',String(total),'-map_metadata','-1','-metadata:s:v:0','rotate=0','-movflags','+faststart',output];
 }

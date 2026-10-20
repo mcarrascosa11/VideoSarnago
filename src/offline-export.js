@@ -2,10 +2,22 @@ import {shortCues} from './subtitles.js';
 import {trimRange, trimCues} from './trim.js';
 import {videoLayout} from './layout.js';
 import {makeCanvas, drawScaled, paintCover, paintOutro, paintOverlay, canvasPng} from './visuals.js';
-import {getFfmpeg, ffmpegThreads, mountFile} from './ffmpeg.js';
+import {getFfmpeg, ffmpegThreads, mountFile, execWatched, disableMultithread} from './ffmpeg.js';
 import {INTRO, FPS, overlayTimeline, bodyArgs, cardArgs, muxArgs} from './export-plan.js';
 
 export async function exportReel(props) {
+  try {return await renderReel(props);}
+  catch (e) {
+    if (!e?.stalled || !e.multithreaded) throw e;
+    // The multithreaded core stalled: repeat once with the single-thread core.
+    console.warn('VideoSarnago: FFmpeg multihilo bloqueado, se repite con un solo hilo.', e);
+    disableMultithread();
+    props.progress('El modo rápido se ha bloqueado. Repitiendo en modo compatible…', 1);
+    return renderReel(props);
+  }
+}
+
+async function renderReel(props) {
   const {file, video, quality, outro, progress} = props;
   const duration = video.duration;
   if (!file || !Number.isFinite(duration) || duration <= 0) throw new Error('El vídeo no tiene una duración válida.');
@@ -27,14 +39,8 @@ export async function exportReel(props) {
   async function write(n, data) {const path=name(n);files.push(path);await ffmpeg.writeFile(path,data);return path;}
   async function run(args, text, start, range, seconds) {
     stage=text; base=start; span=range; length=seconds; progress(text,start);
-    let timer;
-    try {
-      const exit=await Promise.race([
-        ffmpeg.exec(['-y',...args]),
-        new Promise((_,reject)=>{timer=setTimeout(()=>{ffmpeg.terminate();reject(new Error('La exportación ha superado 15 minutos. Tus ajustes siguen aquí; prueba con calidad 720p.'));},900000);}),
-      ]);
-      if(exit!==0) throw new Error('No se pudo completar: '+text);
-    } finally {clearTimeout(timer);}
+    const exit=await execWatched(ffmpeg,['-y',...args],{timeoutMessage:'La exportación ha superado 15 minutos. Tus ajustes siguen aquí; prueba con calidad 720p.'});
+    if(exit!==0) throw new Error('No se pudo completar: '+text);
   }
   const {width:w,height:h,orientation}=videoLayout(video,quality);
   props={...props,orientation};

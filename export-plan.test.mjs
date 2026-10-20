@@ -48,3 +48,11 @@ test('single-thread by default; thread count reaches decoder, filters and encode
  const four=bodyArgs('src','ov','body',720,10,'portrait',0,4).join(' ');
  assert.match(four,/-filter_complex_threads 4 -threads 4 -i src/);assert.match(four,/libx264.*-threads 4/);
 });
+test('no FFmpeg input or filter graph is left with automatic (per-core) thread count',()=>{
+ const count=(args,flag)=>args.filter(a=>a===flag).length;
+ const body=bodyArgs('src','ov','body',720,10,'portrait',2,4);
+ assert.equal(count(body,'-i'),2);assert.equal(count(body,'-threads'),3);assert.equal(count(body,'-filter_complex_threads'),1);
+ assert.ok(body.indexOf('-threads',body.indexOf('src'))<body.indexOf('ov'));
+ const mux=muxArgs({list:'l',input:'i',music:'m',volume:7,hasAudio:true,total:5,output:'o'});
+ assert.equal(count(mux,'-i'),3);assert.equal(count(mux,'-threads'),4);
+});

@@ -5,6 +5,7 @@
 const CORE_VERSION = '0.12.10';
 let loading = null;
 let instance = null;
+let singleThreadOnly = false;
 
 export const multithreaded = () => typeof crossOriginIsolated !== 'undefined' && crossOriginIsolated && typeof SharedArrayBuffer !== 'undefined';
 
@@ -41,7 +42,7 @@ export function getFfmpeg(status = () => {}) {
   if (!loading) {
     loading = (async () => {
       let ffmpeg;
-      if (multithreaded()) {
+      if (multithreaded() && !singleThreadOnly) {
         try {ffmpeg = await load(true, status);}
         catch (e) {console.warn('VideoSarnago: FFmpeg multihilo no disponible, se usa un solo hilo.', e);}
       }
@@ -49,6 +50,37 @@ export function getFfmpeg(status = () => {}) {
     })().then(ffmpeg => {instance = ffmpeg; return ffmpeg;}).finally(() => {loading = null;});
   }
   return loading;
+}
+
+// After a stall, use the single-thread core for the rest of the session.
+export function disableMultithread() {
+  singleThreadOnly = true;
+  try {instance?.terminate();} catch {}
+  instance = null;
+}
+
+// Runs an FFmpeg command and fails (terminating FFmpeg) if it stops producing output for stallMs
+// or exceeds maxMs. A stall error has `stalled: true` so callers can retry with the single-thread core.
+export async function execWatched(ffmpeg, args, {stallMs = 60000, maxMs = 900000, timeoutMessage = 'FFmpeg ha superado el tiempo máximo.'} = {}) {
+  let last = performance.now(), watch, timer;
+  const alive = () => {last = performance.now();};
+  ffmpeg.on('log', alive); ffmpeg.on('progress', alive);
+  try {
+    return await Promise.race([
+      ffmpeg.exec(args),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => {ffmpeg.terminate(); reject(new Error(timeoutMessage));}, maxMs);
+        watch = setInterval(() => {
+          if (performance.now() - last < stallMs) return;
+          ffmpeg.terminate();
+          reject(Object.assign(new Error('El motor de vídeo se ha quedado bloqueado.'), {stalled: true, multithreaded: !!ffmpeg.multithreaded}));
+        }, 2000);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer); clearInterval(watch);
+    ffmpeg.off('log', alive); ffmpeg.off('progress', alive);
+  }
 }
 
 // Start downloading FFmpeg in the background so it is ready when needed.
