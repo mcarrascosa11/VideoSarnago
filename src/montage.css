@@ -1,0 +1,12 @@
+.clip-panel{margin:0 0 18px;padding:16px;border:1px solid #c5bbaa;background:#f8f5ef}
+.clip-head{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.clip-head b{font-size:13px}
+.clip-panel .hint{margin:10px 0}
+.clip-list{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.clip-row{display:grid;grid-template-columns:1fr 36px 36px 36px;align-items:stretch;border:1px solid #d3cabe;background:#fffdf8}
+.clip-row.selected{border-color:#856945;box-shadow:inset 4px 0 0 #856945}
+.clip-pick{display:flex;flex-direction:column;align-items:flex-start;gap:3px;background:none;border:0;padding:10px 12px;text-align:left;min-width:0}
+.clip-pick b{font-size:12px;overflow-wrap:anywhere}
+.clip-pick small{font-size:11px;color:#857969}
+.clip-action{background:none;border:0;border-left:1px solid #e1d9cd;color:#6b5436;font-size:16px}
+.clip-action:hover:not(:disabled){background:#efe8dc}
