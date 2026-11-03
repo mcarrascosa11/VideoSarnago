@@ -142,8 +142,9 @@ export function paintOverlay(ctx, props) {
   if (props.orientation === 'landscape') return paintLandscapeOverlay(ctx, props);
   ctx.save();
   const cue = activeCue(props.cues, props.time || 0);
+  const plate = nameplateHeight(props);
   if (cue) {
-    paintShortSubtitle(ctx,cue.text,540,1650,900,64);
+    paintShortSubtitle(ctx,cue.text,540,plate ? Math.min(1650,1775-plate-20) : 1650,900,64);
   }
   ctx.fillStyle = COLORS.night; ctx.fillRect(0, 1775, 1080, 145);
   line(ctx, 1776, 0, 1080);
@@ -153,16 +154,31 @@ export function paintOverlay(ctx, props) {
   ctx.font = '400 25px "DM Sans", Arial, sans-serif';
   ctx.fillStyle = COLORS.earth;
   ctx.fillText(props.shortUrl || 'APOYA LA CAMPAÑA EN GOTEO', 60, 1890);
-  if ((props.time || 0) < 4.5 && (props.name || '').trim()) {
-    ctx.fillStyle = COLORS.night; ctx.fillRect(0, 150, 830, 160);
-    ctx.fillStyle = COLORS.ivory;
-    ctx.font = '600 43px "Cormorant Garamond", Georgia, serif';
-    const title = wrapLines(ctx, props.name, 710, 1)[0] || '';
-    ctx.fillText(title, 58, 223);
-    ctx.fillStyle = COLORS.earth; ctx.font = '400 22px "DM Sans", Arial, sans-serif';
-    ctx.fillText(wrapLines(ctx, props.role, 710, 1)[0] || '', 58, 264);
-  }
+  paintNameplate(ctx, props, 1775, 830);
   ctx.restore();
+}
+
+// Name and role at the start of each intervention: a compact plate resting on the footer,
+// sized to the text, so it never covers the face of whoever is speaking.
+function nameplateHeight(props) {
+  if ((props.time || 0) >= 4.5 || !(props.name || '').trim()) return 0;
+  return (props.role || '').trim() ? 128 : 92;
+}
+function paintNameplate(ctx, props, bottom, maxWidth) {
+  const h = nameplateHeight(props); if (!h) return;
+  ctx.textAlign = 'left';
+  ctx.font = '600 43px "Cormorant Garamond", Georgia, serif';
+  const title = wrapLines(ctx, props.name, maxWidth - 118, 1)[0] || '';
+  let w = ctx.measureText(title).width;
+  ctx.font = '400 22px "DM Sans", Arial, sans-serif';
+  const role = (props.role || '').trim() ? wrapLines(ctx, props.role, maxWidth - 118, 1)[0] || '' : '';
+  w = Math.min(maxWidth, Math.max(300, Math.max(w, ctx.measureText(role).width) + 118));
+  const top = bottom - h;
+  ctx.fillStyle = COLORS.night; ctx.fillRect(0, top, w, h);
+  ctx.fillStyle = COLORS.earth; ctx.fillRect(0, top, 6, h);
+  ctx.fillStyle = COLORS.ivory; ctx.font = '600 43px "Cormorant Garamond", Georgia, serif';
+  ctx.fillText(title, 58, top + 60);
+  if (role) {ctx.fillStyle = COLORS.earth; ctx.font = '400 22px "DM Sans", Arial, sans-serif'; ctx.fillText(role, 58, top + 101);}
 }
 
 export function paintOutro(ctx, props) {
@@ -240,18 +256,14 @@ function paintLandscapeCover(ctx,props) {
   landscapeText(ctx,'2026',1760,1020,100,24,undefined,1,COLORS.earth);ctx.restore();
 }
 function paintLandscapeOverlay(ctx,props) {
-  ctx.save();const cue=activeCue(props.cues,props.time||0);
+  ctx.save();const cue=activeCue(props.cues,props.time||0);const plate=nameplateHeight(props);
   if(cue){
-    paintShortSubtitle(ctx,cue.text,960,900,1460,60);
+    paintShortSubtitle(ctx,cue.text,960,plate?Math.min(900,950-plate-20):900,1460,60);
   }
   ctx.fillStyle=COLORS.night;ctx.fillRect(0,950,1920,130);line(ctx,951,0,1920);
   landscapeText(ctx,'ABRIGAR EL REFUGIO',60,1004,700,31,undefined,1);
   landscapeText(ctx,props.shortUrl||'APOYA LA CAMPAÑA EN GOTEO',60,1050,1780,25,undefined,1,COLORS.earth);
-  if((props.time||0)<4.5&&(props.name||'').trim()){
-    ctx.fillStyle=COLORS.night;ctx.fillRect(0,70,860,150);
-    landscapeText(ctx,props.name,58,130,750,43,'"Cormorant Garamond", Georgia, serif',1);
-    landscapeText(ctx,props.role,58,183,750,22,undefined,1,COLORS.earth);
-  }ctx.restore();
+  paintNameplate(ctx,props,950,860);ctx.restore();
 }
 function paintLandscapeOutro(ctx,props) {
   ctx.save();landscapeBase(ctx,props);
