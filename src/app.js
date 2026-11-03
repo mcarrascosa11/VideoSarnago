@@ -2,18 +2,30 @@ import {CAMPAIGN_URL} from './campaign.js';
 import {trimRange, trimCues} from './trim.js';
 import {videoLayout} from './layout.js';
 import './styles.css';
+import './montage.css';
 import QRCode from 'qrcode';
 import {makeCanvas, drawScaled, paintCover, paintFrame, paintOutro, canvasPng} from './visuals.js';
 import {parseSrt, toSrt, needsReview, shortCues} from './subtitles.js';
 import {automaticSubtitles} from './transcribe.js';
 import {exportReel} from './offline-export.js';
+import {exportMontage} from './montage-export.js';
 import {preloadFfmpeg} from './ffmpeg.js';
 
 const $ = id => document.getElementById(id);
 const state = {file:null, photo:null, logo:null, qrImage:null, cues:[], mode:'cover', busy:false, orientation:'portrait', trimStart:0, trimEnd:null};
+// Montage panel: built here so index.html stays as it was.
+$('videoInput').multiple = true;
+$('videoLabel').textContent = 'Seleccionar vídeos';
+$('videoDrop').querySelector('small').textContent = 'MP4 o MOV · vertical u horizontal · uno solo o varios para un montaje';
+$('videoDrop').insertAdjacentHTML('afterend', `<div id="clipPanel" class="clip-panel" hidden><div class="clip-head"><b>Vídeos del montaje</b><label class="file-inline">+ Añadir más<input id="moreVideos" type="file" accept="video/*" multiple></label></div>
+  <p class="hint">Se montan en este orden. Pulsa un vídeo para recortarlo, escribir quién habla y crear sus subtítulos; el nombre aparece al empezar cada intervención.</p>
+  <ol id="clipList" class="clip-list"></ol><p id="clipTotal" class="hint"></p></div>`);
 const video = $('previewVideo');
 const frameVideo = $('frameVideo');
-let sourceUrl, resultUrl, qrVersion = 0;
+let resultUrl, qrVersion = 0;
+// Montage: every selected video is a clip with its own trim, name, role and subtitles.
+const clips = [];
+let current = -1;
 const settings = ['outroSecs','renderQuality','language','musicVolume'];
 try { const saved = JSON.parse(localStorage.getItem('sarnago-settings') || '{}'); settings.forEach(k => {if (saved[k] !== undefined) $(k).value = saved[k];}); } catch {}
 function status(message, pct) {
@@ -26,6 +38,7 @@ function controls() {
   document.querySelectorAll('button,input,select,textarea').forEach(el => el.disabled = state.busy);
   for (const id of ['autoBtn','captureBtn','renderBtn']) $(id).disabled = state.busy || !state.file;
   for (const id of ['coverDownload','gridDownload']) $(id).disabled = state.busy || !state.photo;
+  renderClips();
 }
 async function task(fn) {
   if (state.busy) return;
@@ -48,20 +61,29 @@ async function capture(source = video) {
   const c = makeCanvas(source.videoWidth,source.videoHeight); c.getContext('2d').drawImage(source,0,0);
   state.photo = await loadImage(c.toDataURL('image/png')); $('coverLabel').textContent = 'Fotograma del vídeo'; preview();
 }
-$('videoInput').onchange = () => task(async () => {
-  const file = $('videoInput').files[0]; if (!file) return;
-  video.pause(); if(sourceUrl) URL.revokeObjectURL(sourceUrl);
-  state.file = null; state.cues = []; renderCues(); $('downloadVideo').hidden = true;
-  sourceUrl = URL.createObjectURL(file);
-  await new Promise((resolve,reject) => {video.onloadeddata = resolve; video.onerror = () => reject(new Error('No se puede leer este vídeo. Utiliza MP4 H.264.')); video.src = sourceUrl; video.load();});
-  if (!Number.isFinite(video.duration) || video.duration <= 0) throw new Error('La duración del vídeo no es válida.');
-  frameVideo.src=sourceUrl; frameVideo.load(); $('framePicker').hidden=false; $('frameTime').max=Math.max(0,video.duration-.05); $('frameTime').value=0;
-  state.trimStart=0;state.trimEnd=video.duration;
-  $('trimStart').value='0';$('trimEnd').value=String(video.duration);
-  for(const id of ['trimStart','trimEnd']) $(id).max=video.duration;
-  $('trimPanel').hidden=false;updateTrim();
-  state.orientation = videoLayout(video).orientation;
-  const horizontal = state.orientation === 'landscape';
+function probeFile(file) {
+  return new Promise((resolve, reject) => {
+    const probe = document.createElement('video'), url = URL.createObjectURL(file);
+    probe.preload = 'metadata'; probe.muted = true;
+    probe.onloadedmetadata = () => {
+      if (!Number.isFinite(probe.duration) || probe.duration <= 0) {URL.revokeObjectURL(url); reject(new Error(`La duración de «${file.name}» no es válida.`)); return;}
+      resolve({file, url, duration: probe.duration, width: probe.videoWidth, height: probe.videoHeight,
+        orientation: probe.videoWidth > probe.videoHeight ? 'landscape' : 'portrait',
+        name: '', role: '', cues: [], trimStart: 0, trimEnd: probe.duration});
+    };
+    probe.onerror = () => {URL.revokeObjectURL(url); reject(new Error(`No se puede leer «${file.name}». Utiliza MP4 H.264.`));};
+    probe.src = url;
+  });
+}
+// Saves what is in the editor into the selected clip.
+function syncCurrent() {
+  const clip = clips[current]; if (!clip) return;
+  clip.name = $('personName').value; clip.role = $('personRole').value; clip.cues = state.cues;
+  clip.trimStart = state.trimStart; clip.trimEnd = state.trimEnd ?? clip.duration;
+}
+function setOrientation(orientation) {
+  state.orientation = orientation;
+  const horizontal = orientation === 'landscape';
   const canvas = $('previewCanvas'); canvas.width = horizontal ? 960 : 540; canvas.height = horizontal ? 540 : 960;
   document.querySelector('.preview-canvas-wrap').classList.toggle('landscape', horizontal);
   document.querySelector('.preview-caption').children[0].textContent = horizontal ? 'FORMATO 16:9' : 'FORMATO 09:16';
@@ -69,9 +91,86 @@ $('videoInput').onchange = () => task(async () => {
   $('renderQuality').options[0].textContent = horizontal ? '1280 × 720 · más rápido' : '720 × 1280 · más rápido';
   $('renderQuality').options[1].textContent = horizontal ? '1920 × 1080 · alta calidad' : '1080 × 1920 · alta calidad';
   $('coverDownload').textContent = 'Descargar portada ' + (horizontal ? 'horizontal' : 'vertical') + ' · PNG';
-  state.file = file; $('videoLabel').textContent = file.name; await capture(); status('Vídeo preparado.');
+}
+async function loadClip(index) {
+  syncCurrent();
+  const clip = clips[index];
+  video.pause(); frameVideo.pause();
+  state.file = null; current = index; $('downloadVideo').hidden = true;
+  await new Promise((resolve, reject) => {video.onloadeddata = resolve; video.onerror = () => reject(new Error('No se puede leer este vídeo. Utiliza MP4 H.264.')); video.src = clip.url; video.load();});
+  frameVideo.src = clip.url; frameVideo.load(); $('framePicker').hidden = false; $('frameTime').max = Math.max(0, clip.duration - .05); $('frameTime').value = 0;
+  state.cues = clip.cues; state.trimStart = clip.trimStart; state.trimEnd = clip.trimEnd;
+  $('trimStart').value = String(clip.trimStart); $('trimEnd').value = String(clip.trimEnd);
+  for (const id of ['trimStart', 'trimEnd']) $(id).max = clip.duration;
+  $('trimPanel').hidden = false;
+  $('personName').value = clip.name; $('personRole').value = clip.role;
+  // The montage keeps the orientation of the first clip; a single video keeps its own.
+  setOrientation(clips[0].orientation);
+  state.file = clip.file;
+  $('videoLabel').textContent = clips.length > 1 ? `Editando ${index + 1} de ${clips.length} · ${clip.file.name}` : clip.file.name;
+  renderCues(); updateTrim();
+  if (!state.photo) await capture();
+  renderClips(); preview();
+}
+function resetEditor() {
+  video.pause(); frameVideo.pause();
+  video.removeAttribute('src'); video.load(); frameVideo.removeAttribute('src'); frameVideo.load();
+  state.file = null; state.cues = []; state.trimStart = 0; state.trimEnd = null; current = -1;
+  $('framePicker').hidden = true; $('trimPanel').hidden = true; $('downloadVideo').hidden = true;
+  $('personName').value = ''; $('personRole').value = '';
+  $('videoLabel').textContent = 'Seleccionar vídeos';
+  renderCues(); preview();
+}
+const seconds = n => n.toLocaleString('es-ES', {minimumFractionDigits: 1, maximumFractionDigits: 1}) + ' s';
+function renderClips() {
+  const list = $('clipList'); list.replaceChildren();
+  $('clipPanel').hidden = !clips.length;
+  let total = 0;
+  clips.forEach((clip, i) => {
+    const kept = Math.max(0, (clip.trimEnd ?? clip.duration) - clip.trimStart); total += kept;
+    const row = document.createElement('li'); row.className = 'clip-row' + (i === current ? ' selected' : '');
+    const pick = document.createElement('button'); pick.type = 'button'; pick.className = 'clip-pick';
+    const title = document.createElement('b'); title.textContent = `${i + 1}. ${clip.name.trim() || clip.file.name}`;
+    const info = document.createElement('small'); info.textContent = `${seconds(kept)} de ${seconds(clip.duration)}` + (clip.orientation !== clips[0].orientation ? ' · con márgenes' : '') + ((i === current ? state.cues : clip.cues).length ? ` · ${(i === current ? state.cues : clip.cues).length} subtítulos` : '');
+    pick.append(title, info); pick.onclick = () => {if (i !== current) task(() => loadClip(i));};
+    row.append(pick);
+    for (const [text, label, action, off] of [['↑', 'Subir', () => moveClip(i, -1), i === 0], ['↓', 'Bajar', () => moveClip(i, 1), i === clips.length - 1], ['×', 'Quitar de la lista', () => task(() => removeClip(i)), false]]) {
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'clip-action'; b.textContent = text; b.title = label; b.setAttribute('aria-label', label); b.disabled = off || state.busy; b.onclick = action; row.append(b);
+    }
+    list.append(row);
+  });
+  $('clipTotal').textContent = clips.length > 1 ? `${clips.length} vídeos · ${seconds(total)} en total, más el cierre. El montaje usa la orientación del primer vídeo.` : 'Añade más vídeos para montarlos uno detrás de otro.';
+  $('renderBtn').textContent = clips.length > 1 ? `Crear montaje (${clips.length} vídeos) · MP4 ↗` : 'Crear Reel · MP4 ↗';
+}
+function moveClip(index, delta) {
+  syncCurrent();
+  const target = index + delta; if (target < 0 || target >= clips.length) return;
+  [clips[index], clips[target]] = [clips[target], clips[index]];
+  if (current === index) current = target; else if (current === target) current = index;
+  setOrientation(clips[0].orientation);
+  $('videoLabel').textContent = `Editando ${current + 1} de ${clips.length} · ${clips[current].file.name}`;
+  $('downloadVideo').hidden = true; renderClips(); preview();
+}
+async function removeClip(index) {
+  syncCurrent();
+  const [clip] = clips.splice(index, 1); URL.revokeObjectURL(clip.url);
+  if (!clips.length) {resetEditor(); renderClips(); return;}
+  if (index === current) {current = -1; await loadClip(Math.min(index, clips.length - 1));}
+  else {if (index < current) current--; setOrientation(clips[0].orientation); $('downloadVideo').hidden = true; renderClips(); preview();}
+}
+const addVideos = input => () => task(async () => {
+  const files = [...input.files]; input.value = '';
+  if (!files.length) return;
+  const added = [];
+  for (const file of files) {status(`Leyendo ${file.name}…`); added.push(await probeFile(file));}
+  const first = clips.length;
+  clips.push(...added);
+  await loadClip(first);
+  status(clips.length > 1 ? `${clips.length} vídeos en el montaje. Selecciona cada uno para recortarlo, poner nombre y subtítulos.` : 'Vídeo preparado.');
   preloadFfmpeg();
 });
+$('videoInput').onchange = addVideos($('videoInput'));
+$('moreVideos').onchange = addVideos($('moreVideos'));
 $('captureBtn').onclick = () => task(async () => {
   frameVideo.pause();
   if (frameVideo.seeking) await new Promise((resolve, reject) => {const timer=setTimeout(()=>reject(new Error('No se pudo cargar ese fotograma. Selecciona otro instante.')),10000);frameVideo.addEventListener('seeked',()=>{clearTimeout(timer);resolve();},{once:true});});
@@ -98,6 +197,7 @@ function updateTrim() {
     const range=trimRange(video.duration,$('trimStart').value===''?NaN:Number($('trimStart').value),$('trimEnd').value===''?NaN:Number($('trimEnd').value));
     state.trimStart=range.start;state.trimEnd=range.end;
     $('trimSummary').textContent='Se conservarán '+range.duration.toFixed(2)+' s de '+video.duration.toFixed(2)+' s. La portada y el cierre se añaden después.';
+    if(clips[current]){clips[current].trimStart=range.start;clips[current].trimEnd=range.end;renderClips();}
     preview();return range;
   } catch(e){$('trimSummary').textContent=e.message;return null;}
 }
@@ -111,7 +211,7 @@ frameVideo.addEventListener('pause',()=>{playingTrim=false;frameVideo.muted=true
 frameVideo.addEventListener('timeupdate',()=>{if(playingTrim&&frameVideo.currentTime>=state.trimEnd)frameVideo.pause();});
 video.addEventListener('play',()=>{if(video.currentTime<state.trimStart||video.currentTime>=state.trimEnd)video.currentTime=state.trimStart;});
 video.addEventListener('timeupdate',()=>{if(!video.paused&&video.currentTime>=state.trimEnd)video.pause();});
-for(const id of ['personName','personRole']) $(id).addEventListener('input',preview);
+for(const id of ['personName','personRole']) $(id).addEventListener('input',()=>{syncCurrent();renderClips();preview();});
 for(const [id,mode] of [['showCover','cover'],['showOutro','outro'],['showLive','live']]) $(id).onclick=()=>{state.mode=mode; document.querySelectorAll('.preview-switch button').forEach(b=>b.classList.toggle('selected',b.id===id)); video.classList.toggle('hidden',mode!=='live'); if(mode!=='live')video.pause(); preview();};
 video.addEventListener('timeupdate',preview); video.addEventListener('seeked',preview);
 function renderCues() {
@@ -135,15 +235,21 @@ $('autoBtn').onclick=()=>task(async()=>{
 for(const [id,grid] of [['coverDownload',false],['gridDownload',true]]) $(id).onclick=()=>task(async()=>{await document.fonts.ready;const horizontal=!grid&&state.orientation==='landscape';const c=makeCanvas(horizontal?1920:1080,grid?1350:horizontal?1080:1920);drawScaled(c,paintCover,props(),grid);download(await canvasPng(c),grid?'sarnago-portada-4x5.png':'sarnago-portada.png');});
 $('renderBtn').onclick=()=>task(async()=>{
   if(!updateTrim())throw new Error($('trimSummary').textContent);
-  if(!$('personName').value.trim()) throw new Error('Escribe el nombre de la persona.');
+  syncCurrent();
+  const montage=clips.length>1;
+  if(!montage&&!$('personName').value.trim()) throw new Error('Escribe el nombre de la persona.');
   await updateQr(); if(!state.qrImage) throw new Error('No se pudo generar el QR de la campaña. Vuelve a intentarlo.');
   const outro=Number($('outroSecs').value);
   if(!Number.isFinite(outro)||outro<2||outro>12)throw new Error('Revisa la duración del cierre (2–12 s).');
-  if(state.cues.some(c=>!Number.isFinite(c.start)||!Number.isFinite(c.end)||c.start<0||c.end<=c.start||c.end>video.duration+.1))throw new Error('Revisa los tiempos de los subtítulos.');
+  clips.forEach((clip,i)=>{if(clip.cues.some(c=>!Number.isFinite(c.start)||!Number.isFinite(c.end)||c.start<0||c.end<=c.start||c.end>clip.duration+.1))throw new Error(montage?`Revisa los tiempos de los subtítulos del vídeo ${i+1}.`:'Revisa los tiempos de los subtítulos.');});
   video.pause();frameVideo.pause();$('downloadVideo').hidden=true;await document.fonts.ready;
-  const result=await exportReel({...props(),outro,quality:Number($('renderQuality').value),musicVolume:Number($('musicVolume').value),progress:status});
+  const settings={outro,quality:Number($('renderQuality').value),musicVolume:Number($('musicVolume').value),progress:status};
+  const result=montage
+    ? await exportMontage({...settings,clips:clips.map(c=>({...c})),logo:state.logo,qrImage:state.qrImage,shortUrl:CAMPAIGN_URL.replace(/^https?:\/\//,'')})
+    : await exportReel({...props(),...settings});
   const blob=result.blob;
-  if(resultUrl)URL.revokeObjectURL(resultUrl);resultUrl=URL.createObjectURL(blob);$('downloadVideo').href=resultUrl;$('downloadVideo').download='26CrowdfundingVideo_'+($('personName').value.trim().replace(/[<>:"/\\|?*\x00-\x1f]/g,'').replace(/\s+/g,'_')||'NOMBRE')+'.mp4';$('downloadVideo').hidden=false;status(result.musicWarning ? `Vídeo terminado. Ya puedes descargarlo. ${result.musicWarning}` : 'Vídeo terminado. Ya puedes descargarlo.',100);
+  const filename=montage?'26CrowdfundingVideo_Montaje.mp4':'26CrowdfundingVideo_'+($('personName').value.trim().replace(/[<>:"/\\|?*\x00-\x1f]/g,'').replace(/\s+/g,'_')||'NOMBRE')+'.mp4';
+  if(resultUrl)URL.revokeObjectURL(resultUrl);resultUrl=URL.createObjectURL(blob);$('downloadVideo').href=resultUrl;$('downloadVideo').download=filename;$('downloadVideo').hidden=false;status(result.musicWarning ? `Vídeo terminado. Ya puedes descargarlo. ${result.musicWarning}` : 'Vídeo terminado. Ya puedes descargarlo.',100);
 });
 $('campaignLink').href=CAMPAIGN_URL;
-controls(); preview(); updateQr();document.fonts.ready.then(preview);
+controls(); renderClips(); preview(); updateQr();document.fonts.ready.then(preview);
