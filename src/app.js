@@ -9,6 +9,7 @@ import {parseSrt, toSrt, needsReview, shortCues} from './subtitles.js';
 import {automaticSubtitles} from './transcribe.js';
 import {exportReel} from './offline-export.js';
 import {exportMontage} from './montage-export.js';
+import {paintMontageCover} from './montage-cover.js';
 import {preloadFfmpeg} from './ffmpeg.js';
 
 const $ = id => document.getElementById(id);
@@ -19,6 +20,8 @@ $('videoLabel').textContent = 'Seleccionar vídeos';
 $('videoDrop').querySelector('small').textContent = 'MP4 o MOV · vertical u horizontal · uno solo o varios para un montaje';
 $('videoDrop').insertAdjacentHTML('afterend', `<div id="clipPanel" class="clip-panel" hidden><div class="clip-head"><b>Vídeos del montaje</b><label class="file-inline">+ Añadir más<input id="moreVideos" type="file" accept="video/*" multiple></label></div>
   <p class="hint">Se montan en este orden. Pulsa un vídeo para recortarlo, escribir quién habla y crear sus subtítulos; el nombre aparece al empezar cada intervención.</p>
+  <div class="two montage-cover-fields"><label>Título de la portada<input id="montageTitle" type="text" maxlength="60" value="Voces de Sarnago" autocomplete="off"></label><label>Subtítulo de la portada<input id="montageSubtitle" type="text" maxlength="110" autocomplete="off"></label></div>
+  <p class="hint">La portada es un collage con un fotograma de cada vídeo. Para cambiar el de uno, selecciónalo, busca el instante y pulsa «Usar este fotograma en el collage».</p>
   <ol id="clipList" class="clip-list"></ol><p id="clipTotal" class="hint"></p></div>`);
 const video = $('previewVideo');
 const frameVideo = $('frameVideo');
@@ -47,8 +50,50 @@ async function task(fn) {
   finally {state.busy = false; controls();}
 }
 function props() {return {...state, name:$('personName').value, role:$('personRole').value, shortUrl:CAMPAIGN_URL.replace(/^https?:\/\//,''), video, time:Math.max(0,video.currentTime-state.trimStart)};}
+// Montage cover: collage of one frame per video, with its own title and subtitle.
+const montage = () => clips.length > 1;
+function coverProps() {
+  if (!montage()) return props();
+  return {...props(), frames: clips.map(c => c.frame), title: $('montageTitle').value, subtitle: $('montageSubtitle').value.trim() || `${clips.length} apoyos a Abriguemos El Refugio`};
+}
+function coverPainter() {return montage() ? paintMontageCover : paintCover;}
 function preview() {
-  drawScaled($('previewCanvas'), state.mode === 'outro' ? paintOutro : state.mode === 'live' ? paintFrame : paintCover, {...props(),cues:shortCues(trimCues(state.cues,state.trimStart,state.trimEnd??Infinity))});
+  if (state.mode === 'cover') {drawScaled($('previewCanvas'), coverPainter(), coverProps()); return;}
+  drawScaled($('previewCanvas'), state.mode === 'outro' ? paintOutro : paintFrame, {...props(),cues:shortCues(trimCues(state.cues,state.trimStart,state.trimEnd??Infinity))});
+}
+// Frame used for each video in the collage: the one chosen by hand, or a moment just after the start of its trim.
+function collageTime(clip) {
+  if (Number.isFinite(clip.coverTime)) return clip.coverTime;
+  const end = clip.trimEnd ?? clip.duration;
+  return Math.min(end - .05, clip.trimStart + Math.min(1.5, Math.max(0, (end - clip.trimStart) * .3)));
+}
+function grabFrame(clip, time) {
+  return new Promise((resolve, reject) => {
+    const v = document.createElement('video'); v.muted = true; v.preload = 'auto'; v.playsInline = true;
+    let timer;
+    const done = (error, canvas) => {clearTimeout(timer); v.removeAttribute('src'); v.load(); if (error) reject(error); else resolve(canvas);};
+    timer = setTimeout(() => done(new Error(`No se pudo leer un fotograma de «${clip.file.name}».`)), 15000);
+    v.onerror = () => done(new Error(`No se pudo leer un fotograma de «${clip.file.name}».`));
+    v.onloadeddata = () => {v.currentTime = Math.max(.01, Math.min(time, clip.duration - .05));};
+    v.onseeked = () => {
+      const k = Math.min(1, 960 / Math.max(v.videoWidth, v.videoHeight));
+      const c = makeCanvas(Math.round(v.videoWidth * k), Math.round(v.videoHeight * k));
+      c.getContext('2d').drawImage(v, 0, 0, c.width, c.height); done(null, c);
+    };
+    v.src = clip.url;
+  });
+}
+let collageJob = Promise.resolve(), collageTimer;
+function refreshCollage() {
+  collageJob = collageJob.then(async () => {
+    for (const clip of [...clips]) {
+      const time = collageTime(clip);
+      if (clip.frame && Math.abs(clip.frameAt - time) < .04) continue;
+      try {clip.frame = await grabFrame(clip, time); clip.frameAt = time;} catch (e) {console.warn(e);}
+    }
+    preview();
+  });
+  return collageJob;
 }
 function download(blob, filename) {
   const url = URL.createObjectURL(blob), a = document.createElement('a');
@@ -140,6 +185,8 @@ function renderClips() {
     list.append(row);
   });
   $('clipTotal').textContent = clips.length > 1 ? `${clips.length} vídeos · ${seconds(total)} en total, más el cierre. El montaje usa la orientación del primer vídeo.` : 'Añade más vídeos para montarlos uno detrás de otro.';
+  $('captureBtn').textContent = clips.length > 1 ? 'Usar este fotograma en el collage' : 'Usar fotograma del vídeo';
+  $('coverDownload').disabled = $('gridDownload').disabled = state.busy || !(state.photo || clips.length > 1);
   $('renderBtn').textContent = clips.length > 1 ? `Crear montaje (${clips.length} vídeos) · MP4 ↗` : 'Crear Reel · MP4 ↗';
 }
 function moveClip(index, delta) {
@@ -166,6 +213,7 @@ const addVideos = input => () => task(async () => {
   const first = clips.length;
   clips.push(...added);
   await loadClip(first);
+  if (montage()) await refreshCollage();
   status(clips.length > 1 ? `${clips.length} vídeos en el montaje. Selecciona cada uno para recortarlo, poner nombre y subtítulos.` : 'Vídeo preparado.');
   preloadFfmpeg();
 });
@@ -173,6 +221,11 @@ $('videoInput').onchange = addVideos($('videoInput'));
 $('moreVideos').onchange = addVideos($('moreVideos'));
 $('captureBtn').onclick = () => task(async () => {
   frameVideo.pause();
+  if (montage()) {
+    const clip = clips[current]; clip.coverTime = frameVideo.currentTime; clip.frame = null;
+    await refreshCollage(); state.mode = 'cover'; document.querySelectorAll('.preview-switch button').forEach(b => b.classList.toggle('selected', b.id === 'showCover')); video.classList.add('hidden'); preview();
+    status(`Fotograma del vídeo ${current + 1} actualizado en el collage.`); return;
+  }
   if (frameVideo.seeking) await new Promise((resolve, reject) => {const timer=setTimeout(()=>reject(new Error('No se pudo cargar ese fotograma. Selecciona otro instante.')),10000);frameVideo.addEventListener('seeked',()=>{clearTimeout(timer);resolve();},{once:true});});
   await capture(frameVideo); state.mode='cover'; preview(); status('Portada actualizada con el fotograma seleccionado.');
 });
@@ -197,7 +250,7 @@ function updateTrim() {
     const range=trimRange(video.duration,$('trimStart').value===''?NaN:Number($('trimStart').value),$('trimEnd').value===''?NaN:Number($('trimEnd').value));
     state.trimStart=range.start;state.trimEnd=range.end;
     $('trimSummary').textContent='Se conservarán '+range.duration.toFixed(2)+' s de '+video.duration.toFixed(2)+' s. La portada y el cierre se añaden después.';
-    if(clips[current]){clips[current].trimStart=range.start;clips[current].trimEnd=range.end;renderClips();}
+    if(clips[current]){clips[current].trimStart=range.start;clips[current].trimEnd=range.end;renderClips();clearTimeout(collageTimer);if(montage()&&!Number.isFinite(clips[current].coverTime))collageTimer=setTimeout(refreshCollage,700);}
     preview();return range;
   } catch(e){$('trimSummary').textContent=e.message;return null;}
 }
@@ -212,6 +265,7 @@ frameVideo.addEventListener('timeupdate',()=>{if(playingTrim&&frameVideo.current
 video.addEventListener('play',()=>{if(video.currentTime<state.trimStart||video.currentTime>=state.trimEnd)video.currentTime=state.trimStart;});
 video.addEventListener('timeupdate',()=>{if(!video.paused&&video.currentTime>=state.trimEnd)video.pause();});
 for(const id of ['personName','personRole']) $(id).addEventListener('input',()=>{syncCurrent();renderClips();preview();});
+for(const id of ['montageTitle','montageSubtitle']) $(id).addEventListener('input',preview);
 for(const [id,mode] of [['showCover','cover'],['showOutro','outro'],['showLive','live']]) $(id).onclick=()=>{state.mode=mode; document.querySelectorAll('.preview-switch button').forEach(b=>b.classList.toggle('selected',b.id===id)); video.classList.toggle('hidden',mode!=='live'); if(mode!=='live')video.pause(); preview();};
 video.addEventListener('timeupdate',preview); video.addEventListener('seeked',preview);
 function renderCues() {
@@ -232,7 +286,7 @@ $('autoBtn').onclick=()=>task(async()=>{
   try {state.cues=await automaticSubtitles(state.file,$('language').value,video.duration,report);renderCues();preview();const doubtful=state.cues.filter(needsReview).length;report('Subtítulos preparados con Whisper Small. Puedes editar cada frase.'+(doubtful?' Hay '+doubtful+' fragmentos marcados para revisar por repetición o duración.':''));}
   catch(e){report('No se han generado los subtítulos: '+(e?.message || String(e)));throw e;}
 });
-for(const [id,grid] of [['coverDownload',false],['gridDownload',true]]) $(id).onclick=()=>task(async()=>{await document.fonts.ready;const horizontal=!grid&&state.orientation==='landscape';const c=makeCanvas(horizontal?1920:1080,grid?1350:horizontal?1080:1920);drawScaled(c,paintCover,props(),grid);download(await canvasPng(c),grid?'sarnago-portada-4x5.png':'sarnago-portada.png');});
+for(const [id,grid] of [['coverDownload',false],['gridDownload',true]]) $(id).onclick=()=>task(async()=>{await document.fonts.ready;const horizontal=!grid&&state.orientation==='landscape';const c=makeCanvas(horizontal?1920:1080,grid?1350:horizontal?1080:1920);if(montage())await refreshCollage();drawScaled(c,coverPainter(),coverProps(),grid);download(await canvasPng(c),(montage()?'sarnago-portada-montaje':'sarnago-portada')+(grid?'-4x5.png':'.png'));});
 $('renderBtn').onclick=()=>task(async()=>{
   if(!updateTrim())throw new Error($('trimSummary').textContent);
   syncCurrent();
