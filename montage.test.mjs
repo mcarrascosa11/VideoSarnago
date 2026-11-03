@@ -23,3 +23,8 @@ test('montage: final mux copies video, joins voices and keeps every input single
  const dry=montageMuxArgs({list:'l',voiceList:'vl',music:null,volume:0,total:12,output:'o'});
  assert.equal(count(dry,'-i'),2);assert.match(dry.join(' '),/\[voice\]anull\[a\]/);
 });
+import {collageGrid} from './src/montage-cover.js';
+test('montage cover: collage grid fits every frame without empty rows',()=>{
+ for(const n of [2,3,4,5,6,7,8,9,10,11,12]){const {cols,rows}=collageGrid(n,1080,1115);assert.ok(cols*rows>=n);assert.ok(cols*(rows-1)<n);}
+ assert.deepEqual(collageGrid(1,1080,1115),{cols:1,rows:1});
+});
