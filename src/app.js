@@ -12,6 +12,7 @@ import {exportMontage} from './montage-export.js';
 import {paintMontageCover} from './montage-cover.js';
 import {preloadFfmpeg} from './ffmpeg.js';
 import {getItem, putItem, deleteItem, clearStore, keepStorage} from './project-store.js';
+import {fixVocabulary, DEFAULT_VOCABULARY} from './vocabulary.js';
 
 const $ = id => document.getElementById(id);
 const state = {file:null, photo:null, logo:null, qrImage:null, cues:[], mode:'cover', busy:false, orientation:'portrait', trimStart:0, trimEnd:null};
@@ -24,6 +25,10 @@ $('videoDrop').insertAdjacentHTML('afterend', `<div id="clipPanel" class="clip-p
   <div class="two montage-cover-fields"><label>Título de la portada<input id="montageTitle" type="text" maxlength="60" value="Voces de Sarnago" autocomplete="off"></label><label>Subtítulo de la portada<input id="montageSubtitle" type="text" maxlength="110" autocomplete="off"></label></div>
   <p class="hint">La portada es un collage con un fotograma de cada vídeo. Para cambiar el de uno, selecciónalo, busca el instante y pulsa «Usar este fotograma en el collage».</p>
   <ol id="clipList" class="clip-list"></ol><p id="clipTotal" class="hint"></p></div>`);
+// Own words for the subtitles (Sarnago, hacendera…), saved in this browser with the other settings.
+$('autoBtn').parentElement.insertAdjacentHTML('afterend', `<div class="vocabulary-box"><label>Diccionario propio · palabras que Whisper debe escribir bien<input id="vocabulary" type="text" value="${DEFAULT_VOCABULARY}" autocomplete="off" spellcheck="false"></label>
+  <p class="hint">Separadas por comas. Con mayúscula se escriben siempre con mayúscula (Sarnago); en minúscula, como palabra normal (hacendera). Se aplica al generar los subtítulos y también puedes aplicarlo a los que ya tienes.</p>
+  <button type="button" id="applyVocabulary" class="secondary">Corregir los subtítulos con el diccionario</button></div>`);
 const video = $('previewVideo');
 const frameVideo = $('frameVideo');
 // Sound on, and pausing never mutes it: the audio stays as the user left it.
@@ -32,7 +37,7 @@ let resultUrl, qrVersion = 0;
 // Montage: every selected video is a clip with its own trim, name, role and subtitles.
 const clips = [];
 let current = -1;
-const settings = ['outroSecs','renderQuality','language','musicVolume'];
+const settings = ['outroSecs','renderQuality','language','musicVolume','vocabulary'];
 try { const saved = JSON.parse(localStorage.getItem('sarnago-settings') || '{}'); settings.forEach(k => {if (saved[k] !== undefined) $(k).value = saved[k];}); } catch {}
 function status(message, pct) {
   $('progressBox').hidden = false;
@@ -338,11 +343,20 @@ function renderCues() {
 }
 $('addCue').onclick=()=>{const start=video.currentTime||0;state.cues.push({start,end:start+3,text:''});renderCues();};
 $('srtInput').onchange=()=>task(async()=>{const f=$('srtInput').files[0];if(!f)return;const cues=parseSrt(await f.text());if(!cues.length)throw new Error('El SRT no contiene subtítulos válidos.');state.cues=shortCues(cues);renderCues();preview();status('Subtítulos importados.');});
+$('applyVocabulary').onclick=()=>{
+  syncCurrent();
+  const words=$('vocabulary').value;let changed=0;
+  const fix=cues=>{const fixed=fixVocabulary(cues,words);fixed.forEach((c,i)=>{if(c.text!==cues[i].text)changed++;});return fixed;};
+  if(clips.length){for(const clip of clips)clip.cues=fix(clip.cues);state.cues=clips[current]?.cues??state.cues;}
+  else state.cues=fix(state.cues);
+  renderCues();renderClips();preview();
+  status(changed?`Diccionario aplicado: ${changed} fragmento${changed>1?'s':''} corregido${changed>1?'s':''}${clips.length>1?' en todos los vídeos':''}.`:'No había nada que corregir con el diccionario.');
+};
 $('exportSrt').onclick=()=>download(new Blob([toSrt(shortCues(trimCues(state.cues,state.trimStart,state.trimEnd??Infinity)))],{type:'text/plain;charset=utf-8'}),'sarnago.srt');
 $('autoBtn').onclick=()=>task(async()=>{
   video.pause();frameVideo.pause();
   const report=message=>{$('subtitleStatus').textContent=message;};
-  try {state.cues=await automaticSubtitles(state.file,$('language').value,video.duration,report);renderCues();preview();const doubtful=state.cues.filter(needsReview).length;report('Subtítulos preparados con Whisper Small. Puedes editar cada frase.'+(doubtful?' Hay '+doubtful+' fragmentos marcados para revisar por repetición o duración.':''));}
+  try {state.cues=fixVocabulary(await automaticSubtitles(state.file,$('language').value,video.duration,report),$('vocabulary').value);renderCues();preview();const doubtful=state.cues.filter(needsReview).length;report('Subtítulos preparados con Whisper Small. Puedes editar cada frase.'+(doubtful?' Hay '+doubtful+' fragmentos marcados para revisar por repetición o duración.':''));}
   catch(e){report('No se han generado los subtítulos: '+(e?.message || String(e)));throw e;}
 });
 for(const [id,grid] of [['coverDownload',false],['gridDownload',true]]) $(id).onclick=()=>task(async()=>{await document.fonts.ready;const horizontal=!grid&&state.orientation==='landscape';const c=makeCanvas(horizontal?1920:1080,grid?1350:horizontal?1080:1920);if(montage())await refreshCollage();drawScaled(c,coverPainter(),coverProps(),grid);download(await canvasPng(c),(montage()?'sarnago-portada-montaje':'sarnago-portada')+(grid?'-4x5.png':'.png'));});
