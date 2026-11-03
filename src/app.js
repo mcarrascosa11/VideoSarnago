@@ -25,6 +25,8 @@ $('videoDrop').insertAdjacentHTML('afterend', `<div id="clipPanel" class="clip-p
   <ol id="clipList" class="clip-list"></ol><p id="clipTotal" class="hint"></p></div>`);
 const video = $('previewVideo');
 const frameVideo = $('frameVideo');
+// Sound on, and pausing never mutes it: the audio stays as the user left it.
+frameVideo.removeAttribute('muted'); frameVideo.defaultMuted = false; frameVideo.muted = false;
 let resultUrl, qrVersion = 0;
 // Montage: every selected video is a clip with its own trim, name, role and subtitles.
 const clips = [];
@@ -260,7 +262,7 @@ $('markEnd').onclick=()=>{$('trimEnd').value=frameVideo.currentTime.toFixed(2);u
 $('resetTrim').onclick=()=>{$('trimStart').value='0';$('trimEnd').value=String(video.duration);updateTrim();};
 let playingTrim=false;
 $('previewTrim').onclick=()=>task(async()=>{const range=updateTrim();if(!range)throw new Error($('trimSummary').textContent);frameVideo.currentTime=range.start;frameVideo.muted=false;playingTrim=true;await frameVideo.play();});
-frameVideo.addEventListener('pause',()=>{playingTrim=false;frameVideo.muted=true;});
+frameVideo.addEventListener('pause',()=>{playingTrim=false;});
 frameVideo.addEventListener('timeupdate',()=>{if(playingTrim&&frameVideo.currentTime>=state.trimEnd)frameVideo.pause();});
 video.addEventListener('play',()=>{if(video.currentTime<state.trimStart||video.currentTime>=state.trimEnd)video.currentTime=state.trimStart;});
 video.addEventListener('timeupdate',()=>{if(!video.paused&&video.currentTime>=state.trimEnd)video.pause();});
