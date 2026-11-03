@@ -10,3 +10,4 @@
 .clip-pick small{font-size:11px;color:#857969}
 .clip-action{background:none;border:0;border-left:1px solid #e1d9cd;color:#6b5436;font-size:16px}
 .clip-action:hover:not(:disabled){background:#efe8dc}
+.clip-tools{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end}

@@ -11,6 +11,7 @@ import {exportReel} from './offline-export.js';
 import {exportMontage} from './montage-export.js';
 import {paintMontageCover} from './montage-cover.js';
 import {preloadFfmpeg} from './ffmpeg.js';
+import {getItem, putItem, deleteItem, clearStore, keepStorage} from './project-store.js';
 
 const $ = id => document.getElementById(id);
 const state = {file:null, photo:null, logo:null, qrImage:null, cues:[], mode:'cover', busy:false, orientation:'portrait', trimStart:0, trimEnd:null};
@@ -18,7 +19,7 @@ const state = {file:null, photo:null, logo:null, qrImage:null, cues:[], mode:'co
 $('videoInput').multiple = true;
 $('videoLabel').textContent = 'Seleccionar vídeos';
 $('videoDrop').querySelector('small').textContent = 'MP4 o MOV · vertical u horizontal · uno solo o varios para un montaje';
-$('videoDrop').insertAdjacentHTML('afterend', `<div id="clipPanel" class="clip-panel" hidden><div class="clip-head"><b>Vídeos del montaje</b><label class="file-inline">+ Añadir más<input id="moreVideos" type="file" accept="video/*" multiple></label></div>
+$('videoDrop').insertAdjacentHTML('afterend', `<div id="clipPanel" class="clip-panel" hidden><div class="clip-head"><b>Vídeos del montaje</b><div class="clip-tools"><button type="button" id="clearClips" class="text-btn">Vaciar y empezar de cero</button><label class="file-inline">+ Añadir más<input id="moreVideos" type="file" accept="video/*" multiple></label></div></div>
   <p class="hint">Se montan en este orden. Pulsa un vídeo para recortarlo, escribir quién habla y crear sus subtítulos; el nombre aparece al empezar cada intervención.</p>
   <div class="two montage-cover-fields"><label>Título de la portada<input id="montageTitle" type="text" maxlength="60" value="Voces de Sarnago" autocomplete="off"></label><label>Subtítulo de la portada<input id="montageSubtitle" type="text" maxlength="110" autocomplete="off"></label></div>
   <p class="hint">La portada es un collage con un fotograma de cada vídeo. Para cambiar el de uno, selecciónalo, busca el instante y pulsa «Usar este fotograma en el collage».</p>
@@ -60,6 +61,7 @@ function coverProps() {
 }
 function coverPainter() {return montage() ? paintMontageCover : paintCover;}
 function preview() {
+  saveSoon();
   if (state.mode === 'cover') {drawScaled($('previewCanvas'), coverPainter(), coverProps()); return;}
   drawScaled($('previewCanvas'), state.mode === 'outro' ? paintOutro : paintFrame, {...props(),cues:shortCues(trimCues(state.cues,state.trimStart,state.trimEnd??Infinity))});
 }
@@ -114,7 +116,7 @@ function probeFile(file) {
     probe.preload = 'metadata'; probe.muted = true;
     probe.onloadedmetadata = () => {
       if (!Number.isFinite(probe.duration) || probe.duration <= 0) {URL.revokeObjectURL(url); reject(new Error(`La duración de «${file.name}» no es válida.`)); return;}
-      resolve({file, url, duration: probe.duration, width: probe.videoWidth, height: probe.videoHeight,
+      resolve({id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()), file, url, duration: probe.duration, width: probe.videoWidth, height: probe.videoHeight,
         orientation: probe.videoWidth > probe.videoHeight ? 'landscape' : 'portrait',
         name: '', role: '', cues: [], trimStart: 0, trimEnd: probe.duration});
     };
@@ -127,6 +129,45 @@ function syncCurrent() {
   const clip = clips[current]; if (!clip) return;
   clip.name = $('personName').value; clip.role = $('personRole').value; clip.cues = state.cues;
   clip.trimStart = state.trimStart; clip.trimEnd = state.trimEnd ?? clip.duration;
+}
+// Work in progress is kept in this browser: after reloading (for example when the web is updated) it comes back as it was.
+let saveTimer;
+function saveSoon() {clearTimeout(saveTimer); saveTimer = setTimeout(saveProject, 800);}
+async function saveProject() {
+  if (state.busy) {saveSoon(); return;}
+  syncCurrent();
+  const data = {
+    clips: clips.map(c => ({id: c.id, fileName: c.file.name, name: c.name, role: c.role, cues: c.cues.map(({start, end, text}) => ({start, end, text})),
+      trimStart: c.trimStart, trimEnd: c.trimEnd, coverTime: c.coverTime})),
+    current, title: $('montageTitle').value, subtitle: $('montageSubtitle').value,
+  };
+  try {await putItem('meta', 'project', data);} catch (e) {console.warn('VideoSarnago: no se pudo guardar el trabajo.', e);}
+}
+async function restoreProject() {
+  let saved;
+  try {saved = await getItem('meta', 'project');} catch {return;}
+  if (!saved?.clips?.length) return;
+  status('Recuperando tu trabajo anterior…');
+  let missing = 0;
+  for (const s of saved.clips) {
+    let file;
+    try {file = await getItem('files', s.id);} catch {}
+    if (!file) {missing++; continue;}
+    if (!(file instanceof File)) file = new File([file], s.fileName || 'video.mp4', {type: file.type});
+    try {
+      const clip = await probeFile(file);
+      const trimStart = Math.min(Math.max(0, s.trimStart ?? 0), clip.duration - .05);
+      Object.assign(clip, {id: s.id, name: s.name || '', role: s.role || '', cues: s.cues || [], trimStart,
+        trimEnd: Math.max(trimStart + .05, Math.min(s.trimEnd ?? clip.duration, clip.duration)), coverTime: s.coverTime});
+      clips.push(clip);
+    } catch {missing++;}
+  }
+  if (typeof saved.title === 'string') $('montageTitle').value = saved.title;
+  if (typeof saved.subtitle === 'string') $('montageSubtitle').value = saved.subtitle;
+  if (!clips.length) {status('No se pudo recuperar el trabajo anterior. Vuelve a añadir los vídeos.'); return;}
+  await loadClip(Math.min(Math.max(0, saved.current || 0), clips.length - 1));
+  if (montage()) await refreshCollage();
+  status(`Trabajo recuperado: ${clips.length} vídeo${clips.length > 1 ? 's' : ''}` + (missing ? ` (${missing} no se pudieron recuperar; vuelve a añadirlos)` : '') + '. Para empezar otro, pulsa «Vaciar y empezar de cero».');
 }
 function setOrientation(orientation) {
   state.orientation = orientation;
@@ -203,6 +244,7 @@ function moveClip(index, delta) {
 async function removeClip(index) {
   syncCurrent();
   const [clip] = clips.splice(index, 1); URL.revokeObjectURL(clip.url);
+  deleteItem('files', clip.id).catch(() => {});
   if (!clips.length) {resetEditor(); renderClips(); return;}
   if (index === current) {current = -1; await loadClip(Math.min(index, clips.length - 1));}
   else {if (index < current) current--; setOrientation(clips[0].orientation); $('downloadVideo').hidden = true; renderClips(); preview();}
@@ -212,15 +254,30 @@ const addVideos = input => () => task(async () => {
   if (!files.length) return;
   const added = [];
   for (const file of files) {status(`Leyendo ${file.name}…`); added.push(await probeFile(file));}
+  keepStorage();
+  let unsaved = 0;
+  for (const [i, clip] of added.entries()) {
+    status(`Guardando una copia en este navegador (${i + 1} de ${added.length})…`);
+    try {await putItem('files', clip.id, clip.file);} catch (e) {unsaved++; console.warn('VideoSarnago: no se pudo guardar una copia del vídeo.', e);}
+  }
   const first = clips.length;
   clips.push(...added);
   await loadClip(first);
   if (montage()) await refreshCollage();
-  status(clips.length > 1 ? `${clips.length} vídeos en el montaje. Selecciona cada uno para recortarlo, poner nombre y subtítulos.` : 'Vídeo preparado.');
+  status((clips.length > 1 ? `${clips.length} vídeos en el montaje. Selecciona cada uno para recortarlo, poner nombre y subtítulos.` : 'Vídeo preparado.')
+    + (unsaved ? ` Ojo: ${unsaved} vídeo${unsaved > 1 ? 's' : ''} no se ha${unsaved > 1 ? 'n' : ''} podido guardar en el navegador (falta espacio); si recargas la página, habrá que volver a añadirlo${unsaved > 1 ? 's' : ''}.` : ''));
+  await saveProject();
   preloadFfmpeg();
 });
 $('videoInput').onchange = addVideos($('videoInput'));
 $('moreVideos').onchange = addVideos($('moreVideos'));
+$('clearClips').onclick = () => task(async () => {
+  if (!confirm('¿Quitar todos los vídeos y empezar de cero? Se borrará el trabajo guardado en este navegador.')) return;
+  for (const clip of clips) URL.revokeObjectURL(clip.url);
+  clips.length = 0; resetEditor();
+  try {await clearStore('files'); await deleteItem('meta', 'project');} catch {}
+  status('Lista vacía. Puedes empezar un montaje nuevo.');
+});
 $('captureBtn').onclick = () => task(async () => {
   frameVideo.pause();
   if (montage()) {
@@ -309,3 +366,4 @@ $('renderBtn').onclick=()=>task(async()=>{
 });
 $('campaignLink').href=CAMPAIGN_URL;
 controls(); renderClips(); preview(); updateQr();document.fonts.ready.then(preview);
+task(restoreProject);
